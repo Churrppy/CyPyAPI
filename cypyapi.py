@@ -122,6 +122,13 @@ class CyPyAPI:
 
         :return:
         """
+        now = datetime.utcnow()
+        epoch_now = int((now - datetime(1970, 1, 1)).total_seconds())
+
+        if epoch_now >= self.timeout:
+            return True
+        else:
+            return False
 
     def get_access_token(self, timeout=1800):
         """
@@ -288,24 +295,93 @@ class CyPyAPI:
     def get_threat(self, sha256_hash):
         """
             Request threat details on a specific hash
-        :param hash:
+        :param sha256_hash:
         :return:
         """
+        if self.token_timeout_check():
+            self.get_access_token()
+
         if 64 > len(sha256_hash) > 64:
             raise response_exception.InvalidSHA256Error
         else:
-            response = requests.get(str(self.base_endpoint + services['threats']), headers=headers)
+            response = requests.get(str(self.base_endpoint + services['threats'] + sha256_hash), headers=self.headers)
 
-            # Validates the response code, and returns an exception otherwise.
+            # Validates the response code, and returns an exception if the request is not a success.
             if self.resp_code_check(response['status_code']):
                 content = json.loads(response.content)
                 return content[0]
 
-    def get_threats(self):
+    def get_threats(self, page_num=0, page_size=200):
         """
             Request a page with a list of console threat resources. Sorted by last found date, in descending order.
+
+        Response
+        {
+            "page_number": 0,
+            "page_size": 0,
+            "total_pages": 0,
+            "total_number_of_items": 0,
+            "page_items": [
+                {
+                    "name": "string",
+                    "sha256": "string",
+                    "md5": "string",
+                    "cylance_score": 0,
+                    "av_industry": 0,
+                    "classification": "string",
+                    "sub_classification": "string",
+                    "global_quarantined": true,
+                    "safelisted": true,
+                    "file_size": 0,
+                    "unique_to_cylance": true
+                    "last_found": "2017-06-15T21:35:11.994Z"
+                }
+            ]
+        }
         :return:
         """
+        if self.token_timeout_check():
+            self.get_access_token()
+
+        threats = []
+
+        # If the page number is greater than 1, we have to loop through the pages.
+        if page_num < 1:
+            # TODO: Comment this.
+            current_page = 1
+            while True:
+                # Set the initial page and the maximum page_size.
+                params = {
+                    'page': current_page,
+                    'page_size': 200
+                }
+
+                response = requests.get(str(self.base_endpoint + services['threats']), params=params)
+                try:
+                    if self.resp_code_check(response['status_code']):
+                        content = json.loads(response.content)
+                        threats.append(content[0])
+
+                        current_page += 1
+                except response_exception.Response404Error:
+                    # HTTP404 indicates that no more threats exist, so we end the loop,
+                    break
+
+        else:
+            # Set the parameters of the request.
+            params = {
+                'page': page_num,
+                'page_size': page_size
+            }
+
+            response = requests.get(str(self.base_endpoint + services['threats']), params=params)
+
+            # Validates the response code, and returns an exception if the request is not a success.
+            if self.resp_code_check(response['status_code']):
+                content = json.loads(response.content)
+                return content[0]
+
+        return threats
 
     def get_threat_devices(self, hash):
         """
@@ -313,9 +389,13 @@ class CyPyAPI:
         :param hash:
         :return:
         """
+        if self.token_timeout_check():
+            self.get_access_token()
 
     def get_threat_download_link(self):
         """
 
         :return:
         """
+        if self.token_timeout_check():
+            self.get_access_token()
