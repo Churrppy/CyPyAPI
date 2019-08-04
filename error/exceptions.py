@@ -72,7 +72,7 @@ class Response404Error(Error):
     def __init__(self):
 
         self.code = 404
-        self.message = str(self.code) + ' -- NotFound -- The threat requested doesn\'t exist.'
+        self.message = str(self.code) + ' -- NotFound -- The requested resource can\'t be found.'
 
 
 class Response409Error(Error):
@@ -88,6 +88,20 @@ class Response409Error(Error):
         self.code = 409
         self.message = str(self.code) + ' -- Conflict -- This request conflicts with an aspect of another resource.' \
                                         'Can occur if tenant name or email are already in use.'
+
+
+class Response429Error(Error):
+    """Exception raised for errors in response.
+
+    Attributes:
+          code -- response code that was returned.
+          message -- explanation of the response code as per the Cylance API documentation.
+    """
+
+    def __init__(self):
+
+        self.code = 429
+        self.message = str(self.code) + ' -- TooManyRequests -- The rate limit has been reached.'
 
 
 class Response500Error(Error):
@@ -130,3 +144,16 @@ class InvalidSHA256Error(Error):
     def __init__(self):
 
         self.message = 'Invalid SHA256 -- This hash does not meet the length requirements for SHA256'
+
+
+class InvalidBaseEndpoint(Error):
+    """Exception raised for when an invalid base endpoint is selected.
+
+    Attributes:
+           code --
+           message --
+    """
+
+    def __init__(self):
+
+        self.message = 'Invalid Base Endpoint'
