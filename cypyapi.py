@@ -7,9 +7,11 @@
     Updated: 2019-06-06
     Contact: justin@roguetechconsulting.com
 
+    Endpoints: Devices, Global List, Policy, Threat, User, Zone
+
 """
 import requests
-import error.exceptions as response_exception
+import error.exceptions as exception
 import json
 import jwt
 import uuid
@@ -18,12 +20,12 @@ import time
 from datetime import datetime, timedelta
 
 # -------------------------------------------------  VARIABLES  ------------------------------------------------------ #
-# Region codes don't include North America or US Government as they have dedicated base endpoints.
-region_codes = ['apne1', 'au', 'euc1', 'sae1']  # TODO: This doesn't currently do anything.
+region_codes = ['apne1', 'au', 'euc1', 'sae1']
 
 services = {
             'auth': 'auth/v2/',
             'threats': 'threats/v2/',
+            'devices': 'devices/v2/'
         }
 
 user_roles = {  # TODO: This doesn't currently do anything.
@@ -60,13 +62,16 @@ class CyPyAPI:
         # Set the appropriate Service Endpoint based on the Region Code.
         if region_code is 'na':
             self.base_endpoint = 'https://protectapi.cylance.com/'
+            logging.info('NA Base Endpoint selected.')
         elif region_code is 'us-gov':
             self.base_endpoint = 'https://protectapi.us.cylance.com/'
+            logging.info('US-GOV Base Endpoint selected.')
         elif region_code in region_codes:
             self.base_endpoint = 'https://protectapi-' + region_code + '.cylance.com/'
+            logging.info(str(region_code) + ' Base Endpoint selected.')
         else:
             logging.error('Invalid region code provided')
-            print('[!] Invalid region code provided')  # TODO: Replace with exception.
+            raise
 
         # These are used when generating access tokens
         self.tenant_id = tenant_id
@@ -99,23 +104,23 @@ class CyPyAPI:
         """
 
         if response_code == 400:
-            raise response_exception.Response400Error
+            raise exception.Response400Error
         elif response_code == 401:
-            raise response_exception.Response401Error
+            raise exception.Response401Error
         elif response_code == 403:
-            raise response_exception.Response403Error
+            raise exception.Response403Error
         elif response_code == 404:
-            raise response_exception.Response404Error
+            raise exception.Response404Error
         elif response_code == 409:
-            raise response_exception.Response409Error
+            raise exception.Response409Error
         elif response_code == 500:
-            raise response_exception.Response500Error
+            raise exception.Response500Error
         elif response_code == 501:
-            raise response_exception.Response501Error
+            raise exception.Response501Error
         elif response_code == 200:
             return True
         else:
-            raise response_exception.ResponseError(response_code)
+            raise exception.ResponseError(response_code)
 
     def token_timeout_check(self):
         """
@@ -141,7 +146,7 @@ class CyPyAPI:
             print('[!] Timeout can not exceed 1800 seconds')  # TODO: Replace with exception.
 
         else:
-            # Create some time objects to set token expiry and issued time
+            # Create some time variables to set token expiry and issued time
             now_utc = datetime.utcnow()
             timeout_datetime = now_utc + timedelta(seconds=timeout)
             epoch_time = int((now_utc - datetime(1970, 1, 1)).total_seconds())
@@ -157,7 +162,7 @@ class CyPyAPI:
                 'iss': 'http://cylance.com',  # Issuer-Don't Change It
                 'sub': self.app_id,
                 'tid': self.tenant_id,
-                'jti': jti_val  # TODO: Store this in a DB table and check if it exists to detect impersonation attacks.
+                'jti': jti_val  # SECURITY: Store this in a DB table and check against each access attempt to detect impersonation attacks.
                 # 'scp' :
             }
 
@@ -168,15 +173,10 @@ class CyPyAPI:
             headers = {'Content-Type': 'application/json, charset=utf-8'}
             response = requests.post(str(self.base_endpoint + services['auth']), headers=headers, data=json.dumps(payload))
 
-            if response.status_code == 200:
-                print(json.loads(response.content))  # TODO: Modify this to so that this def returns the access token and its expiry.
+            if self.resp_code_check(response['status_code']):
                 response_content = json.loads(response.content)
                 # Set access token.
                 self.access_token = response_content['access_token']
-
-            else:
-                logging.error('Error requesting access token.' + str(response.status_code))
-                print('[!] Error requesting access token: ' + str(response.status_code))  # TODO: Replace with exception
 
     def create_user(self, email, user_role, first_name, last_name, zones=[]):
         """
@@ -228,17 +228,123 @@ class CyPyAPI:
         :return:
         """
 
-    def get_devices(self):
+    def get_devices(self, page_num=0, page_size=200):
         """
             Request a page with a list of a device resources. Sorted by created date in descending order.
+
+            {
+              "page_number": 0,
+              "page_size": 0,
+              "total_pages": 0,
+              "total_number_of_items": 0,
+              "page_items": [
+                {
+                  "id": "string",
+                   "name”: “string",
+                   "state": “string",
+                   "agent_version": "string",
+                   "policy": {
+                     “id": "string",
+                      “name": "string"
+                  },
+                  "date_first_registered": "2017-07-28T16:35:46.081Z",
+                  “ip_addresses”: [
+                     “string1”,
+                     “string2” ],
+                  “mac_addresses”: [
+                     “string1”,
+                     “string2” ]
+                }
+              ]
+            }
+        :return:
+        """
+        devices = []
+
+        # If the page number is less than 1, we have to loop through the pages to get them all
+        if page_num == 0:
+            # Set the current page to 1
+            current_page = 1
+            while True:
+                # Set the initial page and the maximum page_size.
+                params = {
+                    'page': current_page,
+                    'page_size': page_size
+                }
+
+                # Generate a new access token before each request for security.
+                self.get_access_token()
+                response = requests.get(str(self.base_endpoint + services['devices']), params=params)
+
+                if self.resp_code_check(response['status_code']):
+                    if response.content['data']:
+                        content = json.loads(response.content)
+                        devices.append(content[0])
+                        # TODO: Comment this.
+                        current_page += 1
+
+                    else:
+                        continue
+
+        else:
+            # Set the parameters of the request.
+            params = {
+                'page': page_num,
+                'page_size': page_size
+            }
+
+            # Generate a new access token before each request for security.
+            self.get_access_token()
+            response = requests.get(str(self.base_endpoint + services['devices']), params=params)
+
+            # Validates the response code, and returns an exception if the request is not a success.
+            if self.resp_code_check(response['status_code']):
+                content = json.loads(response.content)
+                devices = content[0]
+
+        return devices
+
+    def get_device(self, device_id):
+        """
+            Request information on a device.
+
+            {
+                "id": "string",
+                 "name": "string",
+                 "host_name": "string",
+                 "os_version": "string",
+                 "state": "string",
+                 "agent_version": "string",
+                 "policy": {
+                    “id": "string",
+                     “name": "string"
+                },
+                "last_logged_in_user": "string",
+                "update_type": "string",
+                "update_available": true,
+                "background_detection": true,
+                "is_safe": true,
+                "date_first_registered": "2017-06-15T18:02:45.714Z",
+                "date_offline": "2017-06-15T18:02:45.714Z",
+                "date_last_modified": "2017-06-15T18:02:45.714Z",
+                  “ip_addresses”: [
+                     “string1”,
+                     “string2” ],
+                  “mac_addresses”: [
+                     “string1”,
+                     “string2” ]
+            }
         :return:
         """
 
-    def get_device(self):
-        """
-            Request information on a device.
-        :return:
-        """
+        # Generate a new access token before each request for security.
+        self.get_access_token()
+        response = requests.get(str(self.base_endpoint + services['devices'] + device_id), headers=self.headers)
+
+        # Validates the response code, and returns an exception if the request is not a success.
+        if self.resp_code_check(response['status_code']):
+            content = json.loads(response.content)
+            return content[0]
 
     def update_device(self, device_id):
         """
@@ -246,12 +352,76 @@ class CyPyAPI:
         :return:
         """
 
-    def get_device_threats(self, device_id):
+    def get_device_threats(self, device_id, page_num=0, page_size=200):
         """
             Requests a page with a list of threats found on a specific device.
+
+            {
+                "page_number": 0,
+                "page_size": 0,
+                "total_pages": 0,
+                "total_number_of_items": 0,
+                "page_items": [
+                    {
+                        "name": "string",
+                        "sha256”: “string",
+                        "file_status": 0,
+                        "file_path": "string",
+                        "cylance_score": 0,
+                        "classification": "string",
+                        "sub_classification": "string",
+                        "date_found": "2017-06-15T18:02:45.714Z"
+                    }
+                ]
+            }
+
         :param device_id:
         :return:
         """
+        device_threats = []
+
+        # If the page number is less than 1, we have to loop through the pages to get them all
+        if page_num == 0:
+            # Set the current page to 1
+            current_page = 1
+            while True:
+                # Set the initial page and the maximum page_size.
+                params = {
+                    'page': current_page,
+                    'page_size': page_size
+                }
+
+                # Generate a new access token before each request for security.
+                self.get_access_token()
+                response = requests.get(str(self.base_endpoint + services['devices'] + device_id + '/threats'), params=params)
+
+                if self.resp_code_check(response['status_code']):
+                    if response.content['data']:
+                        content = json.loads(response.content)
+                        device_threats.append(content[0])
+                        # TODO: Comment this.
+                        current_page += 1
+
+                    else:
+                        continue
+
+        else:
+            # Set the parameters of the request.
+            params = {
+                'page': page_num,
+                'page_size': page_size
+            }
+
+            # Generate a new access token before each request for security.
+            self.get_access_token()
+            response = requests.get(str(self.base_endpoint + services['devices'] + device_id + '/threats'), params=params)
+
+            # Validates the response code, and returns an exception if the request is not a success.
+            if self.resp_code_check(response['status_code']):
+                content = json.loads(response.content)
+                device_threats = content[0]
+
+        return device_threats
 
     def update_device_threat(self, device_id):
         """
@@ -298,12 +468,12 @@ class CyPyAPI:
         :param sha256_hash:
         :return:
         """
-        if self.token_timeout_check():
-            self.get_access_token()
-
         if 64 > len(sha256_hash) > 64:
-            raise response_exception.InvalidSHA256Error
+            raise exception.InvalidSHA256Error
+
         else:
+            # Generate a new access token before each request for security.
+            self.get_access_token()
             response = requests.get(str(self.base_endpoint + services['threats'] + sha256_hash), headers=self.headers)
 
             # Validates the response code, and returns an exception if the request is not a success.
@@ -340,32 +510,32 @@ class CyPyAPI:
         }
         :return:
         """
-        if self.token_timeout_check():
-            self.get_access_token()
-
         threats = []
 
-        # If the page number is greater than 1, we have to loop through the pages.
-        if page_num < 1:
-            # TODO: Comment this.
+        # If the page number is less than 1, we have to loop through the pages to get them all
+        if page_num == 0:
+            # Set the current page to 1
             current_page = 1
             while True:
                 # Set the initial page and the maximum page_size.
                 params = {
                     'page': current_page,
-                    'page_size': 200
+                    'page_size': page_size
                 }
 
+                # Generate a new access token before each request for security.
+                self.get_access_token()
                 response = requests.get(str(self.base_endpoint + services['threats']), params=params)
-                try:
-                    if self.resp_code_check(response['status_code']):
+
+                if self.resp_code_check(response['status_code']):
+                    if response.content['data']:
                         content = json.loads(response.content)
                         threats.append(content[0])
-
+                        # TODO: Comment this.
                         current_page += 1
-                except response_exception.Response404Error:
-                    # HTTP404 indicates that no more threats exist, so we end the loop,
-                    break
+
+                    else:
+                        continue
 
         else:
             # Set the parameters of the request.
@@ -374,28 +544,105 @@ class CyPyAPI:
                 'page_size': page_size
             }
 
+            # Generate a new access token before each request for security.
+            self.get_access_token()
             response = requests.get(str(self.base_endpoint + services['threats']), params=params)
 
             # Validates the response code, and returns an exception if the request is not a success.
             if self.resp_code_check(response['status_code']):
                 content = json.loads(response.content)
-                return content[0]
+                threats = content[0]
 
         return threats
 
-    def get_threat_devices(self, hash):
+    def get_threat_devices(self, hash_, page_num=0, page_size=200):
         """
            Request a list of MAC addresses and IP addresses associated with a specific threat(hash).
+
+           Response
+           {
+                "page_number": 0,
+                "page_size": 0,
+                "total_pages": 0,
+                "total_number_of_items": 0,
+                "page_items": [
+                    {
+                        "id": "string",
+                        "name": "string",
+                        "state": "Offline",
+                        "agent_version": "string",
+                        "policy_id": "string",
+                        "date_found": "2017-06-15T21:35:11.994Z",
+                        "file_status": "Quarantined",
+                        "file_path": "string",
+                        "ip_addresses": [
+                            "string1",
+                            "string2" ],
+                        "mac_addresses": [
+                            "string1”,
+                            "string2” ]
+                    }
+                ]
+            }
+
         :param hash:
         :return:
         """
+
         if self.token_timeout_check():
             self.get_access_token()
 
-    def get_threat_download_link(self):
+            devices = []
+
+            # If the page number is less than 1, we have to loop through the pages to get them all
+            if page_num == 0:
+                # Set the current page to 1
+                current_page = 1
+                while True:
+                    # Set the initial page and the maximum page_size.
+                    params = {
+                        'page': current_page,
+                        'page_size': page_size
+                    }
+
+                    response = requests.get(str(self.base_endpoint + services['threats'] + hash_ + '/devices'), params=params)
+
+                    if self.resp_code_check(response['status_code']):
+                        if response.content['data']:
+                            content = json.loads(response.content)
+                            devices.append(content[0])
+                            # TODO: Comment this.
+                            current_page += 1
+
+                        else:
+                            continue
+
+            else:
+                # Set the parameters of the request.
+                params = {
+                    'page': page_num,
+                    'page_size': page_size
+                }
+
+                response = requests.get(str(self.base_endpoint + services['threats'] + hash_ + '/devices'), params=params)
+
+                # Validates the response code, and returns an exception if the request is not a success.
+                if self.resp_code_check(response['status_code']):
+                    content = json.loads(response.content)
+                    devices = content[0]
+
+            return devices
+
+    def get_threat_download_link(self, hash_):
         """
 
         :return:
         """
         if self.token_timeout_check():
             self.get_access_token()
+
+        response = requests.get(str(self.base_endpoint + services['threats'] + '/download/' + hash_))
+
+        if self.resp_code_check(response['status_code']):
+            content = json.loads(response.content)
+            return content[0]
