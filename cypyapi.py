@@ -26,7 +26,8 @@ services = {
             'auth': 'auth/v2/',
             'threats': 'threats/v2/',
             'devices': 'devices/v2/',
-            'globallists': 'globallists/v2/'
+            'globallists': 'globallists/v2/',
+            'zones': 'zones/v2/'
         }
 
 user_roles = {  # TODO: This doesn't currently do anything.
@@ -743,6 +744,159 @@ class CyPyAPI:
 
         response = requests.get(str(self.base_endpoint + services['threats'] + '/download/' + hash_))
 
+        if self.resp_code_check(response['status_code']):
+            content = json.loads(response.content)
+            return content[0]
+
+    def get_zones(self, page_num=0, page_size=200):
+        """
+            {
+                "page_number": 0,
+                "page_size": 0,
+                "total_pages": 0,
+                "total_number_of_items": 0,
+                "page_items": [
+                    {
+                        "id": "string",
+                        "name": "string",
+                        "criticality": "string",
+                        "zone_rule_id": "string",
+                        "policy_id": "string",
+                        “update_type”: “string”,
+                        "date_created": "2017-06-15T21:35:11.994Z",
+                        "date_modified": "2017-06-15T21:35:11.994Z"
+                    }
+                ]
+            }
+        :return:
+        """
+        zones = []
+
+        # If the page number is less than 1, we have to loop through the pages to get them all
+        if page_num == 0:
+            # Set the current page to 1
+            current_page = 1
+            while True:
+                # Set the initial page and the maximum page_size.
+                params = {
+                    'page': current_page,
+                    'page_size': page_size
+                }
+
+                # Generate a new access token before each request for security.
+                self.get_access_token()
+                response = requests.get(str(self.base_endpoint + services['zones']), params=params)
+
+                if self.resp_code_check(response['status_code']):
+                    if response.content['data']:
+                        content = json.loads(response.content)
+                        zones.append(content[0])
+                        # TODO: Comment this.
+                        current_page += 1
+
+                    else:
+                        continue
+
+        else:
+            # Set the parameters of the request.
+            params = {
+                'page': page_num,
+                'page_size': page_size
+            }
+
+            # Generate a new access token before each request for security.
+            self.get_access_token()
+            response = requests.get(str(self.base_endpoint + services['zones']), params=params)
+
+            # Validates the response code, and returns an exception if the request is not a success.
+            if self.resp_code_check(response['status_code']):
+                content = json.loads(response.content)
+                zones = content[0]
+
+        return zones
+
+    def device_zones(self, device_id, page_num=0, page_size=200):
+        """
+            {
+                "page_number": 0,
+                "page_size": 0,
+                "total_pages": 0,
+                "total_number_of_items": 0,
+                "page_items": [
+                    {
+                        "id": "string",
+                        "name": "string",
+                        "criticality": "string",
+                        "zone_rule_id": "string",
+                        "policy_id": "string",
+                        “update_type”: “string”,
+                        "date_created": "2017-06-15T21:35:11.994Z",
+                        "date_modified": "2017-06-15T21:35:11.994Z"
+                    }
+                ]
+            }
+
+        :param device_id:
+        :param page_num:
+        :param page_size:
+        :return:
+        """
+        zones = []
+
+        # If the page number is less than 1, we have to loop through the pages to get them all
+        if page_num == 0:
+            # Set the current page to 1
+            current_page = 1
+            while True:
+                # Set the initial page and the maximum page_size.
+                params = {
+                    'page': current_page,
+                    'page_size': page_size
+                }
+
+                # Generate a new access token before each request for security.
+                self.get_access_token()
+                response = requests.get(str(self.base_endpoint + services['zones'] + device_id + '/zones'), params=params)
+
+                if self.resp_code_check(response['status_code']):
+                    if response.content['data']:
+                        content = json.loads(response.content)
+                        zones.append(content[0])
+                        # TODO: Comment this.
+                        current_page += 1
+
+                    else:
+                        continue
+
+        else:
+            # Set the parameters of the request.
+            params = {
+                'page': page_num,
+                'page_size': page_size
+            }
+
+            # Generate a new access token before each request for security.
+            self.get_access_token()
+            response = requests.get(str(self.base_endpoint + services['zones'] + device_id + '/zones'), params=params)
+
+            # Validates the response code, and returns an exception if the request is not a success.
+            if self.resp_code_check(response['status_code']):
+                content = json.loads(response.content)
+                zones = content[0]
+
+        return zones
+
+    def get_zone(self, device_id):
+        """
+            Request threat details on a specific hash
+        :param device_id:
+        :return:
+        """
+        # Generate a new access token before each request for security.
+        self.get_access_token()
+        response = requests.get(str(self.base_endpoint + services['zones'] + device_id), headers=self.headers)
+
+        # Validates the response code, and returns an exception if the request is not a success.
         if self.resp_code_check(response['status_code']):
             content = json.loads(response.content)
             return content[0]
