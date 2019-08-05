@@ -157,3 +157,16 @@ class InvalidBaseEndpoint(Error):
     def __init__(self):
 
         self.message = 'Invalid Base Endpoint'
+
+
+class InvalidListType(Error):
+    """Exception raised for when an invalid base endpoint is selected.
+
+    Attributes:
+           code --
+           message --
+    """
+
+    def __init__(self):
+
+        self.message = 'Invalid List Type. List range is 0 (GlobalQuarantine or 1 (GlobalSafe)'

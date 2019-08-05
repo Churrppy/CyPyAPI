@@ -476,6 +476,9 @@ class CyPyAPI:
         :param list_type:
         :return:
         """
+        if 0 != list_type != 1:
+            raise exception.InvalidListType
+
         glist = []
 
         # If the page number is less than 1, we have to loop through the pages to get them all
@@ -525,11 +528,33 @@ class CyPyAPI:
 
         return glist
 
-    def add_global_list(self):
+    def add_global_list(self, sha256_hash, list_type, category, reason):
         """
             Add to a global list
         :return:
         """
+        if 0 != list_type != 1:
+            raise exception.InvalidListType
+
+        if 64 > len(sha256_hash) > 64:  # TODO: Find better ways of checking for valid user input so that it is more exact.
+            raise exception.InvalidSHA256Error
+
+        request = {
+            'sha256': sha256_hash,
+            'list_type': list_type,
+            'category': category,
+            'reason': reason
+        }
+
+        # Generate a new access token before each request for security.
+        self.get_access_token()
+        response = requests.post(str(self.base_endpoint + services['globallists']), data=request)
+
+        if self.resp_code_check(response['status_code']):
+            content = json.loads(response.content)
+            confirmation = content[0]
+
+        return confirmation
 
     def delete_global_list(self):
         """
