@@ -25,7 +25,8 @@ region_codes = ['apne1', 'au', 'euc1', 'sae1']
 services = {
             'auth': 'auth/v2/',
             'threats': 'threats/v2/',
-            'devices': 'devices/v2/'
+            'devices': 'devices/v2/',
+            'globallists': 'globallists/v2/'
         }
 
 user_roles = {  # TODO: This doesn't currently do anything.
@@ -443,12 +444,86 @@ class CyPyAPI:
         :return:
         """
 
-    def get_global_list(self, list_type):
+    def get_global_list(self, list_type, page_num=0, page_size=200):
         """
             Get a list of global list resources.
+
+            {
+              "page_number": 0,
+              "page_size": 0,
+              "total_pages": 0,
+              "total_number_of_items": 0,
+              "page_items": [
+                {
+                  "name": "string",
+                  "sha256": "string",
+                  "md5": "string",
+                  "cylance_score": 0,
+                  "av_industry": 0,
+                  "classification": "string",
+                  "sub_classification": "string",
+                  "list_type": "string",
+                  "category": "string",
+                  "added": "2017-05-22T23:35:56.705Z",
+                  "added_by": "string",
+                  "reason": "string"
+                }
+              ]
+            }
+
+            list_type = 0 or 1 (0 = Global Quarantine :: 1 = Global Safe)
+
         :param list_type:
         :return:
         """
+        glist = []
+
+        # If the page number is less than 1, we have to loop through the pages to get them all
+        if page_num == 0:
+            # Set the current page to 1
+            current_page = 1
+            while True:
+                # Set the initial page and the maximum page_size.
+                params = {
+                    'page': current_page,
+                    'page_size': page_size,
+                    'listTypeId': list_type
+                }
+
+                # Generate a new access token before each request for security.
+                self.get_access_token()
+                response = requests.get(str(self.base_endpoint + services['globallists']),
+                                        params=params)
+
+                if self.resp_code_check(response['status_code']):
+                    if response.content['data']:
+                        content = json.loads(response.content)
+                        glist.append(content[0])
+                        # TODO: Comment this.
+                        current_page += 1
+
+                    else:
+                        continue
+
+        else:
+            # Set the parameters of the request.
+            params = {
+                'page': page_num,
+                'page_size': page_size,
+                'listTypeId': list_type
+            }
+
+            # Generate a new access token before each request for security.
+            self.get_access_token()
+            response = requests.get(str(self.base_endpoint + services['globallists']),
+                                    params=params)
+
+            # Validates the response code, and returns an exception if the request is not a success.
+            if self.resp_code_check(response['status_code']):
+                content = json.loads(response.content)
+                glist = content[0]
+
+        return glist
 
     def add_global_list(self):
         """
