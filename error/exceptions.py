@@ -13,7 +13,7 @@ class ResponseError(Error):
 
     def __init__(self, code):
         self.code = code
-        self.message = str(self.code) + ' -- Unknown -- Unknown HTTP Code in response to this request.'
+        self.message = str(self.code) + ' -- Unknown --'
 
 
 class Response400Error(Error):
@@ -27,8 +27,7 @@ class Response400Error(Error):
     def __init__(self):
 
         self.code = 400
-        self.message = str(self.code) + ' -- BadRequest -- Returned for the following reasons: The Tenant ID could ' \
-                                        'not be retrieved, or The Threat Hash ID specified is invalid.'
+        self.message = str(self.code) + ' -- BadRequest --'
 
 
 class Response401Error(Error):
@@ -42,8 +41,7 @@ class Response401Error(Error):
     def __init__(self):
 
         self.code = 401
-        self.message = str(self.code) + ' -- Unauthorized -- The JWT token was not specified, has expired, or ' \
-                                        'otherwise invalid.'
+        self.message = str(self.code) + ' -- Unauthorized --'
 
 
 class Response403Error(Error):
@@ -57,8 +55,7 @@ class Response403Error(Error):
     def __init__(self):
 
         self.code = 403
-        self.message = str(self.code) + ' -- Forbidden -- The JWT token did not contain the proper scope to ' \
-                                        'perform this action.'
+        self.message = str(self.code) + ' -- Forbidden --'
 
 
 class Response404Error(Error):
@@ -72,7 +69,7 @@ class Response404Error(Error):
     def __init__(self):
 
         self.code = 404
-        self.message = str(self.code) + ' -- NotFound -- The requested resource can\'t be found.'
+        self.message = str(self.code) + ' -- NotFound --'
 
 
 class Response409Error(Error):
@@ -86,8 +83,7 @@ class Response409Error(Error):
     def __init__(self):
 
         self.code = 409
-        self.message = str(self.code) + ' -- Conflict -- This request conflicts with an aspect of another resource.' \
-                                        'Can occur if tenant name or email are already in use.'
+        self.message = str(self.code) + ' -- Conflict --'
 
 
 class Response429Error(Error):
@@ -101,7 +97,7 @@ class Response429Error(Error):
     def __init__(self):
 
         self.code = 429
-        self.message = str(self.code) + ' -- TooManyRequests -- The rate limit has been reached.'
+        self.message = str(self.code) + ' -- TooManyRequests --'
 
 
 class Response500Error(Error):
@@ -115,7 +111,7 @@ class Response500Error(Error):
     def __init__(self):
 
         self.code = 500
-        self.message = str(self.code) + ' -- InternalServerError -- An unforeseeable error has occurred.'
+        self.message = str(self.code) + ' -- InternalServerError --'
 
 
 class Response501Error(Error):
@@ -129,8 +125,7 @@ class Response501Error(Error):
     def __init__(self):
 
         self.code = 501
-        self.message = str(self.code) + ' -- Not Implemented -- A request was made against a resource has not not ' \
-                                        'been implemented.'
+        self.message = str(self.code) + ' -- Not Implemented --'
 
 
 class InvalidSHA256Error(Error):

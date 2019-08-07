@@ -24,6 +24,7 @@ region_codes = ['apne1', 'au', 'euc1', 'sae1']
 
 services = {
             'auth': 'auth/v2/',
+            'users': 'users/v2/',
             'threats': 'threats/v2/',
             'devices': 'devices/v2/',
             'globallists': 'globallists/v2/',
@@ -112,7 +113,7 @@ class CyPyAPI:
         elif response_code == 403:
             raise exception.Response403Error
         elif response_code == 404:
-            raise exception.Response404Error
+            return exception.Response404Error
         elif response_code == 409:
             raise exception.Response409Error
         elif response_code == 500:
@@ -204,13 +205,59 @@ class CyPyAPI:
         :return:
         """
 
-    def get_users(self):
+    def get_users(self, page_num=0, page_size=200):
         """
             Request a page with a list of users. Sorted by created date, in descending order.
 
 
         :return:
         """
+        users = []
+
+        # If the page number is less than 1, we have to loop through the pages to get them all
+        if page_num == 0:
+            # Set the current page to 1
+            current_page = 1
+
+            # Generate a new access token before each request for security.
+            self.get_access_token()
+
+            while True:
+                # Set the initial page and the maximum page_size.
+                params = {
+                    'page': current_page,
+                    'page_size': page_size
+                }
+
+                response = requests.get(str(self.base_endpoint + services['users']), params=params)
+
+                if self.resp_code_check(response['status_code']):
+                    if response.content['data']:
+                        content = json.loads(response.content)
+                        users.append(content[0])
+                        # TODO: Comment this.
+                        current_page += 1
+
+                    else:
+                        continue
+
+        else:
+            # Set the parameters of the request.
+            params = {
+                'page': page_num,
+                'page_size': page_size
+            }
+
+            # Generate a new access token before each request for security.
+            self.get_access_token()
+            response = requests.get(str(self.base_endpoint + services['users']), params=params)
+
+            # Validates the response code, and returns an exception if the request is not a success.
+            if self.resp_code_check(response['status_code']):
+                content = json.loads(response.content)
+                users = content[0]
+
+        return users
 
     def get_user(self):
         """
@@ -223,12 +270,28 @@ class CyPyAPI:
             Update a console user.
         :return:
         """
+        # TODO
 
     def delete_user(self):
         """
             Delete a console user
         :return:
         """
+        # TODO
+
+    def send_invite_email(self):
+        """
+
+        :return:
+        """
+        # TODO
+
+    def send_reset_pass_email(self):
+        """
+
+        :return:
+        """
+        # TODO
 
     def get_devices(self, page_num=0, page_size=200):
         """
@@ -353,6 +416,7 @@ class CyPyAPI:
             Update a console device
         :return:
         """
+        # TODO
 
     def get_device_threats(self, device_id, page_num=0, page_size=200):
         """
@@ -386,6 +450,10 @@ class CyPyAPI:
         if page_num == 0:
             # Set the current page to 1
             current_page = 1
+
+            # Generate a new access token before the entire request for security.
+            self.get_access_token()
+
             while True:
                 # Set the initial page and the maximum page_size.
                 params = {
@@ -393,8 +461,6 @@ class CyPyAPI:
                     'page_size': page_size
                 }
 
-                # Generate a new access token before each request for security.
-                self.get_access_token()
                 response = requests.get(str(self.base_endpoint + services['devices'] + device_id + '/threats'), params=params)
 
                 if self.resp_code_check(response['status_code']):
@@ -425,18 +491,34 @@ class CyPyAPI:
 
         return device_threats
 
+    def get_zone_devices(self):
+        """
+
+        :return:
+        """
+        # TODO
+
+    def get_agent_installer_link(self):
+        """
+
+        :return:
+        """
+        # TODO
+
     def update_device_threat(self, device_id):
         """
             Waive or Quarantine a convicted threat on a device.
         :param device_id:
         :return:
         """
+        # TODO
 
     def delete_devices(self):
         """
             Delete one or more devices from an organization.
         :return:
         """
+        # TODO
 
     def get_device_by_mac(self, mac_address):
         """
@@ -444,6 +526,7 @@ class CyPyAPI:
         :param mac_address:
         :return:
         """
+        # TODO
 
     def get_global_list(self, list_type, page_num=0, page_size=200):
         """
@@ -486,6 +569,10 @@ class CyPyAPI:
         if page_num == 0:
             # Set the current page to 1
             current_page = 1
+
+            # Generate a new access token before each request for security.
+            self.get_access_token()
+
             while True:
                 # Set the initial page and the maximum page_size.
                 params = {
@@ -494,8 +581,6 @@ class CyPyAPI:
                     'listTypeId': list_type
                 }
 
-                # Generate a new access token before each request for security.
-                self.get_access_token()
                 response = requests.get(str(self.base_endpoint + services['globallists']),
                                         params=params)
 
@@ -555,13 +640,33 @@ class CyPyAPI:
             content = json.loads(response.content)
             confirmation = content[0]
 
-        return confirmation
+            return confirmation
 
-    def delete_global_list(self):
+    def delete_global_list(self, list_type, sha256_hash):
         """
             Delete from a global list
         :return:
         """
+        if 0 != list_type != 1:
+            raise exception.InvalidListType
+
+        if 64 > len(sha256_hash) > 64:  # TODO: Find better ways of checking for valid user input so that it is more exact.
+            raise exception.InvalidSHA256Error
+
+        request = {
+            'sha256': sha256_hash,
+            'list_type': list_type,
+        }
+
+        # Generate a new access token before each request for security.
+        self.get_access_token()
+        response = requests.delete(str(self.base_endpoint + services['globallists']), data=request)
+
+        if self.resp_code_check(response['status_code']):
+            content = json.loads(response.content)
+            confirmation = content[0]
+
+            return confirmation
 
     def get_threat(self, sha256_hash):
         """
@@ -617,6 +722,10 @@ class CyPyAPI:
         if page_num == 0:
             # Set the current page to 1
             current_page = 1
+
+            # Generate a new access token before the entire request for security.
+            self.get_access_token()
+
             while True:
                 # Set the initial page and the maximum page_size.
                 params = {
@@ -624,8 +733,6 @@ class CyPyAPI:
                     'page_size': page_size
                 }
 
-                # Generate a new access token before each request for security.
-                self.get_access_token()
                 response = requests.get(str(self.base_endpoint + services['threats']), params=params)
 
                 if self.resp_code_check(response['status_code']):
@@ -689,59 +796,60 @@ class CyPyAPI:
         :param hash:
         :return:
         """
+        devices = []
 
-        if self.token_timeout_check():
+        # If the page number is less than 1, we have to loop through the pages to get them all
+        if page_num == 0:
+            # Set the current page to 1
+            current_page = 1
+
+            # Generate a new access token before the entire request for security.
             self.get_access_token()
 
-            devices = []
-
-            # If the page number is less than 1, we have to loop through the pages to get them all
-            if page_num == 0:
-                # Set the current page to 1
-                current_page = 1
-                while True:
-                    # Set the initial page and the maximum page_size.
-                    params = {
-                        'page': current_page,
-                        'page_size': page_size
-                    }
-
-                    response = requests.get(str(self.base_endpoint + services['threats'] + hash_ + '/devices'), params=params)
-
-                    if self.resp_code_check(response['status_code']):
-                        if response.content['data']:
-                            content = json.loads(response.content)
-                            devices.append(content[0])
-                            # TODO: Comment this.
-                            current_page += 1
-
-                        else:
-                            continue
-
-            else:
-                # Set the parameters of the request.
+            while True:
+                # Set the initial page and the maximum page_size.
                 params = {
-                    'page': page_num,
+                    'page': current_page,
                     'page_size': page_size
                 }
 
                 response = requests.get(str(self.base_endpoint + services['threats'] + hash_ + '/devices'), params=params)
 
-                # Validates the response code, and returns an exception if the request is not a success.
                 if self.resp_code_check(response['status_code']):
-                    content = json.loads(response.content)
-                    devices = content[0]
+                    if response.content['data']:
+                        content = json.loads(response.content)
+                        devices.append(content[0])
+                        # TODO: Comment this.
+                        current_page += 1
 
-            return devices
+                    else:
+                        continue
+
+        else:
+            # Set the parameters of the request.
+            params = {
+                'page': page_num,
+                'page_size': page_size
+            }
+
+            # Generate a new access token before each request for security.
+            self.get_access_token()
+            response = requests.get(str(self.base_endpoint + services['threats'] + hash_ + '/devices'), params=params)
+
+            # Validates the response code, and returns an exception if the request is not a success.
+            if self.resp_code_check(response['status_code']):
+                content = json.loads(response.content)
+                devices = content[0]
+
+        return devices
 
     def get_threat_download_link(self, hash_):
         """
 
         :return:
         """
-        if self.token_timeout_check():
-            self.get_access_token()
-
+        # set an access token
+        self.get_access_token()
         response = requests.get(str(self.base_endpoint + services['threats'] + '/download/' + hash_))
 
         if self.resp_code_check(response['status_code']):
@@ -776,6 +884,10 @@ class CyPyAPI:
         if page_num == 0:
             # Set the current page to 1
             current_page = 1
+
+            # Generate a new access token before each request for security.
+            self.get_access_token()
+
             while True:
                 # Set the initial page and the maximum page_size.
                 params = {
@@ -783,8 +895,6 @@ class CyPyAPI:
                     'page_size': page_size
                 }
 
-                # Generate a new access token before each request for security.
-                self.get_access_token()
                 response = requests.get(str(self.base_endpoint + services['zones']), params=params)
 
                 if self.resp_code_check(response['status_code']):
@@ -815,7 +925,7 @@ class CyPyAPI:
 
         return zones
 
-    def device_zones(self, device_id, page_num=0, page_size=200):
+    def get_device_zones(self, device_id, page_num=0, page_size=200):
         """
             {
                 "page_number": 0,
@@ -841,12 +951,18 @@ class CyPyAPI:
         :param page_size:
         :return:
         """
+        # TODO: Check for a valid device_id
+
         zones = []
 
         # If the page number is less than 1, we have to loop through the pages to get them all
         if page_num == 0:
             # Set the current page to 1
             current_page = 1
+
+            # Generate a new access token before this request, for security.
+            self.get_access_token()
+
             while True:
                 # Set the initial page and the maximum page_size.
                 params = {
@@ -854,8 +970,6 @@ class CyPyAPI:
                     'page_size': page_size
                 }
 
-                # Generate a new access token before each request for security.
-                self.get_access_token()
                 response = requests.get(str(self.base_endpoint + services['zones'] + device_id + '/zones'), params=params)
 
                 if self.resp_code_check(response['status_code']):
@@ -892,6 +1006,8 @@ class CyPyAPI:
         :param device_id:
         :return:
         """
+        # TODO: Check for a valid device_id
+
         # Generate a new access token before each request for security.
         self.get_access_token()
         response = requests.get(str(self.base_endpoint + services['zones'] + device_id), headers=self.headers)
@@ -900,3 +1016,37 @@ class CyPyAPI:
         if self.resp_code_check(response['status_code']):
             content = json.loads(response.content)
             return content[0]
+
+    def create_zone(self):
+        """
+
+        :return:
+        """
+        # TODO
+
+    def update_zone(self):
+        """
+
+        :return:
+        """
+        # TODO
+
+    def delete_zone(self, zone_id):
+        """
+
+        :return:
+        """
+        # TODO: Create an exception like the commented one below to check for a valid zone_id
+        # if 64 > len(
+        #         sha256_hash) > 64:  # TODO: Find better ways of checking for valid user input so that it is more exact.
+        #     raise exception.InvalidSHA256Error
+
+        # Generate a new access token before each request, for security.
+        self.get_access_token()
+        response = requests.delete(str(self.base_endpoint + services['zones'] + zone_id))
+
+        if self.resp_code_check(response['status_code']):
+            content = json.loads(response.content)
+            confirmation = content[0]
+
+            return confirmation
