@@ -259,11 +259,22 @@ class CyPyAPI:
 
         return users
 
-    def get_user(self):
+    def get_user(self, identifier):
         """
             Request a specific console user.
+
+            The identifier can be either a user_id or an email address.
+
         :return:
         """
+        # Generate a new access token before each request for security.
+        self.get_access_token()
+        response = requests.get(str(self.base_endpoint + services['users'] + identifier), headers=self.headers)
+
+        # Validates the response code, and returns an exception if the request is not a success.
+        if self.resp_code_check(response['status_code']):
+            content = json.loads(response.content)
+            return content[0]
 
     def update_user(self):
         """
@@ -491,19 +502,135 @@ class CyPyAPI:
 
         return device_threats
 
-    def get_zone_devices(self):
+    def get_zone_devices(self, zone_id, page_num=0, page_size=200):
         """
 
         :return:
         """
-        # TODO
-
-    def get_agent_installer_link(self):
         """
+                    Request a page with a list of a device resources. Sorted by created date in descending order.
+
+                    {
+                      "page_number": 0,
+                      "page_size": 0,
+                      "total_pages": 0,
+                      "total_number_of_items": 0,
+                      "page_items": [
+                        {
+                          "id": "string",
+                           "name”: “string",
+                           "state": “string",
+                           "agent_version": "string",
+                           "policy": {
+                             “id": "string",
+                              “name": "string"
+                          },
+                          "date_first_registered": "2017-07-28T16:35:46.081Z",
+                          “ip_addresses”: [
+                             “string1”,
+                             “string2” ],
+                          “mac_addresses”: [
+                             “string1”,
+                             “string2” ]
+                        }
+                      ]
+                    }
+                :return:
+                """
+        zone_devices = []
+
+        # If the page number is less than 1, we have to loop through the pages to get them all
+        if page_num == 0:
+            # Set the current page to 1
+            current_page = 1
+            while True:
+                # Set the initial page and the maximum page_size.
+                params = {
+                    'page': current_page,
+                    'page_size': page_size
+                }
+
+                # Generate a new access token before each request for security.
+                self.get_access_token()
+                response = requests.get(str(self.base_endpoint + services['devices'] + zone_id + '/devices'), params=params)
+
+                if self.resp_code_check(response['status_code']):
+                    if response.content['data']:
+                        content = json.loads(response.content)
+                        zone_devices.append(content[0])
+                        # TODO: Comment this.
+                        current_page += 1
+
+                    else:
+                        continue
+
+        else:
+            # Set the parameters of the request.
+            params = {
+                'page': page_num,
+                'page_size': page_size
+            }
+
+            # Generate a new access token before each request for security.
+            self.get_access_token()
+            response = requests.get(str(self.base_endpoint + services['devices']), params=params)
+
+            # Validates the response code, and returns an exception if the request is not a success.
+            if self.resp_code_check(response['status_code']):
+                content = json.loads(response.content)
+                zone_devices = content[0]
+
+        return zone_devices
+
+    def get_agent_installer_link(self, product, os, package, architecture, build):
+        """
+            • product: Specify the Cylance product installer to download. The allo
+             • Protect
+             • Optics
+            • os: Specify the operating system (OS) family. The allo
+             • CentOS7
+             • Linux
+             • Mac
+             • Ubuntu1404
+             • Ubuntu1604
+             • Windows
+            • architecture (required for Windows and macOS): Specify the tar
+            values are:
+             • X86
+             • X64
+             • CentOS6
+             • CentOS6UI
+             • CentOS7
+             • CentOS7UI
+             • Ubuntu1404
+             • Ubuntu1404UI
+             • Ubuntu1604
+             • Ubuntu1604UI
+            • package (required for Windows and macOS): Specify the installer f
+             • Exe (Windows only)
+             • Msi (Windows only)
+             • Dmg (macOS only)
+             • Pkg (macOS only)
+            • build (optional): The Agent version. Example: 1480.
 
         :return:
+
         """
-        # TODO
+        params = {
+            'product': product,
+            'os': os,
+            'package': package,
+            'architecture': architecture,
+            'build': build  # optional
+        }
+
+        # set an access token
+        self.get_access_token()
+        response = requests.get(str(self.base_endpoint + services['devices'] + 'installer'), params=params)
+
+        if self.resp_code_check(response['status_code']):
+            content = json.loads(response.content)
+            return content[0]
 
     def update_device_threat(self, device_id):
         """
@@ -513,12 +640,32 @@ class CyPyAPI:
         """
         # TODO
 
-    def delete_devices(self):
+    def delete_devices(self, callback_url, device_ids=[]):
         """
             Delete one or more devices from an organization.
+
+
         :return:
         """
-        # TODO
+        if not callback_url:
+            data = {
+                'device_ids': device_ids,
+            }
+        else:
+            data = {
+                'device_ids': device_ids,
+                'callback_url': callback_url
+            }
+
+        # Generate a new access token before each request for security.
+        self.get_access_token()
+        response = requests.delete(str(self.base_endpoint + services['devices']), data=data)
+
+        if self.resp_code_check(response['status_code']):
+            content = json.loads(response.content)
+            confirmation = content[0]
+
+            return confirmation
 
     def get_device_by_mac(self, mac_address):
         """
@@ -850,7 +997,7 @@ class CyPyAPI:
         """
         # set an access token
         self.get_access_token()
-        response = requests.get(str(self.base_endpoint + services['threats'] + '/download/' + hash_))
+        response = requests.get(str(self.base_endpoint + services['threats'] + 'download/' + hash_))
 
         if self.resp_code_check(response['status_code']):
             content = json.loads(response.content)
