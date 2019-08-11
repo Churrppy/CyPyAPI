@@ -11,7 +11,7 @@
 
 """
 import requests
-import error.exceptions as exception
+import cypyapi.exceptions as exception
 import json
 import jwt
 import uuid
@@ -170,11 +170,12 @@ class CyPyAPI:
             }
 
             # Encode the request with JWT.
-            encoded_req = jwt.encode(claims, self.app_secret, alg='HS256')
+            encoded_req = jwt.encode(claims, self.app_secret, algorithm='HS256')
 
-            payload = {'auth_token': encoded_req}
-            headers = {'Content-Type': 'application/json, charset=utf-8'}
-            response = requests.post(str(self.base_endpoint + services['auth']), headers=headers, data=json.dumps(payload))
+            payload = {'auth_token': str(encoded_req, 'utf-8')}
+            headers = {'Content-Type': 'application/json; charset=utf-8'}
+            response = requests.post(str(self.base_endpoint + services['auth'] + 'token'), headers=headers,
+                                     data=json.dumps(payload))
 
             if self.resp_code_check(response['status_code']):
                 response_content = json.loads(response.content)
