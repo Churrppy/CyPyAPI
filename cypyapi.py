@@ -1,234 +1,1225 @@
-#!/usr/bin/env python3
+#! /usr/bin/env Python
 """
-    new_cylance.py: Validates list of workstations from QRadar reference set against Cylance to determine if Cylance
-    is properly reporting/installed on the workstation.
-
-    - Workstation reference set has a TTL of 24-hours
+    A Python3 wrapper for the CylanceProtect API.
 
     Author: Justin Robinson
-    Version: 2.0
+    Version: 1.0
+    Updated: 2019-06-06
+    Contact: justin@roguetechconsulting.com
 
-    #TODO:
-    - Check for the install token in the registry as part of the check.
-    - Check workstation name format for anomalies in spelling/format
-    - Output Region based on first three characters.
+    Endpoints: Devices, Global List, Policy, Threat, User, Zone
+
 """
-
 import requests
+import cypyapi.exceptions as exception
 import json
+import jwt
+import uuid
+import logging
+import time
 from datetime import datetime, timedelta
-import warnings
-import pytz
-from base64 import b64decode
-import postgre_conn as pc
-from psycopg2.extras import execute_values
-from cypyapi.cypyapi import CyPyAPI as cypy
 
-warnings.filterwarnings("ignore")
+# -------------------------------------------------  VARIABLES  ------------------------------------------------------ #
+region_codes = ['apne1', 'au', 'euc1', 'sae1']
 
-# QRadar Prod
-qradar_server = '10.181.90.15'
-refset = 'IVZ source workstation list'
-headers = {'SEC': 'e1e45e71-3d2d-41df-a0c5-9e082b0ce77a', 'content-type': 'application/json', 'version': '9.0'}
+services = {
+            'auth': 'auth/v2/',
+            'users': 'users/v2/',
+            'threats': 'threats/v2/',
+            'devices': 'devices/v2/',
+            'globallists': 'globallists/v2/',
+            'zones': 'zones/v2/'
+        }
 
-app_id = 'b6179952-ff25-4bb3-a2a1-8d1aee1e1fa0'  # Claim (sub) - required to generate Cylance token
-app_secret = 'b9a536d3-224d-4073-aec9-b61dd7eb40ce'  # Signature - required to generate Cylance token
-tenant_id = '89cc64ed-49ae-4ca4-ae94-ba10a31b5158'  # (tid) - required to generate Cylance token
-auth_endpoint = 'https://protectapi.cylance.com/auth/v2/token'  # Endpoint to Cylance API
+user_roles = {  # TODO: This doesn't currently do anything.
+            'user': '00000000-0000-0000-0000-000000000001',
+            'administrator': '00000000-0000-0000-0000-000000000002',
+            'zone_manager': '00000000-0000-0000-0000-000000000003'
+        }
 
-# Dev Database
-dev = True
-# report_path = r'\\houdata04\IT Services\CAS\Security\tulz\Reporting\Cylance' + '\\'
-db_host = 'USAPPPYTHWT100'
-db_name = 'sofc_dash'
-db_user = 'corp-app-secmon'
-db_pass = str(b64decode('JXVfYXdBYzVAaWVwcU0wK0YzNkNOb3ZMPw==').decode('utf-8'))
-db_port = 8443
+zone_role_types = {  # TODO: This doesn't currently do anything.
+    'zone_manager': '00000000-0000-0000-0000-000000000001',
+    'user': '00000000-0000-0000-0000-000000000002'
+}
 
-# Dev Database
-
-# Dates
-hou_tz = pytz.timezone('US/Central')
-utc_tz = pytz.utc
-cur_utc_datetime = utc_tz.localize(datetime.utcnow())  # UTC
-cur_central_datetime = cur_utc_datetime.astimezone(hou_tz)  # US/Central
-
-# PostgreSQL Database connection
-postgres_obj = pc.PostgresConnect(db_host, db_name, db_user, db_pass)
-postgres_conn = postgres_obj.connect(db_port)
-postgres_curs = postgres_conn.cursor()
+# scopes = {
+#
+# }
+# ----------------------------------------  DO NOT EDIT BELOW THIS LINE  --------------------------------------------- #
 
 
-def main():
-    # New Cylance object.
-    cylance_obj = cypy(tenant_id, app_id, app_secret)
-
-    # Get a list of devices found in Cylance.
-    print('[*] Gathering list of devices found in Cylance')
-    cylance_devices = cylance_obj.get_devices()
-    print('[*] Found ' + str(len(cylance_devices)) + ' devices\n')
-    for device in cylance_devices:
-
-
-    # Get a list of threats found in Cylance.
-    print('[*] Gathering list of threats found in Cylance')
-    cylance_threats = cylance_obj.get_threats()
-    print('[*] Found ' + str(len(cylance_threats)) + ' threats\n')
-
-    # Get a list of items on either the global blocklist or safelist
-    print('[*] Gathering the Global Quarantine list')
-    cy_quarantine = cylance_obj.get_global_list(0)
-    print('[*] Global Quarantine List contains ' + str(len(cy_quarantine)) + ' items\n')
-
-    print('[*] Gathering the Global Quarantine list')
-    cy_safelist = cylance_obj.get_global_list(1)
-    print('[*] Global Quarantine List contains ' + str(len(cy_safelist)) + ' items\n')
-
-    # Get a list of devices found in QRadar reference set.
-    print('[*] Gathering the list of devices found in QRadar')
-    qradar_devices = get_refset_devices()
-    print('[* Found ' + str(len(qradar_devices)) + ' devices.\n')
-
-    # Compare the lists to find out which devices aren't reporting to Cylance.
-    dnr = devices_not_reporting(cylance_devices, qradar_devices)
-
-    # Store the list of devices and time.
-    #store_devices(dnr)
-
-    # Store Cylance threats in Postgre DB.
-    # store_threats(cylance_threats)
-
-    # Store global quarantine list in Postgre DB.
-    # store_gbl_list(cy_quarantine, 0)
-    # store_gbl_list(cy_safelist, 1)
-
-    # Retrieve Events with given timedelta
-    # td = timedelta(days=7)  # 7 Days
-    # devices_7 = retrieve_events_time(td)
-    # json_output(devices_7, 'not_reporting_7days.json')
-
-    if not dev:
-        # After writing the file. Clear the reference set.
-        requests.delete('https://' + qradar_server + '/api/reference_data/sets/' + refset + '?purge_only=true',
-                        headers=headers,
-                        verify=False
-                        )
-        print('[*] Reference Set Purged')
-
-    postgres_conn.close()
-
-
-def get_refset_devices():
-    """
-        Get a list of devices from reference set 'IVZ source workstation list'.
-        This list contains successful workstations logons in the last 3 days.
-
-    :return:
-    """
-    workstations = []
-
-    response = requests.get('https://' + qradar_server + '/api/reference_data/sets/' + refset,
-                            headers=headers,
-                            verify=False
-                            )
-
-    body = json.loads(response.content)
-    rs_data = body['data']
-
-    for workstation in rs_data:
-        workstations.append(str(workstation['value']).upper())
-
-    return workstations
-
-
-def devices_not_reporting(cylance_devices, qradar_devices):
-    """
-        Print the input list of devices to a .json file.
-    :return:
-    """
-    # Add devices that aren't found in Cylance to separate list.
-    devices = []
-    for device in qradar_devices:
-        if device not in cylance_devices:
-            entry = [device, str(cur_utc_datetime)]
-            devices.append(entry)
-
-    return devices
-
-
-def store_devices(device_list):
+class CyPyAPI:
     """
 
-    :param device_list:
-    :return:
-    """
-    postgres_query = 'INSERT INTO cy_workstations_not_reporting (workstation_name, reported_time) VALUES %s'
-    execute_values(postgres_curs, postgres_query, device_list)
-
-    if postgres_conn.commit():
-        print('[*] Non-reporting devices saved to Postgres DB.')
-
-
-def json_output(events, filename):
     """
 
-    :param devices:
-    :return:
-    """
-    # Save to JSON file
-    print('[!] ' + report_path + filename)
+    def __init__(self, tenant_id, app_id, app_secret, region_code='na'):
+        """
 
-    try:
-        with open(report_path + filename, 'w') as outfile:
-            data = json.dumps(events, indent=4, sort_keys=True, separators=(',', ': '), ensure_ascii=False)
-            outfile.write(data)
-    except FileNotFoundError as fnf_error:
-        print(
-            r'File not found. ' + str(fnf_error))
-    except PermissionError as perm_error:
-        print(
-            r'You don\'t have permission to ' + report_path
-            + str(perm_error))
-    finally:
-        print('[*] Write Complete')
+        """
+        # Create a new logging configuration
+        # Levels: Debug, Info, Warning, Error, Critical
+        logging_format = '%(created)f - %(name)s - %(levelname)s - %(message)s'
+        logging.basicConfig(filename='cypyapi.log', filemode='w', format=logging_format)
+
+        # Set the appropriate Service Endpoint based on the Region Code.
+        if region_code is 'na':
+            self.base_endpoint = 'https://protectapi.cylance.com/'
+            logging.info('NA Base Endpoint selected.')
+        elif region_code is 'us-gov':
+            self.base_endpoint = 'https://protectapi.us.cylance.com/'
+            logging.info('US-GOV Base Endpoint selected.')
+        elif region_code in region_codes:
+            self.base_endpoint = 'https://protectapi-' + region_code + '.cylance.com/'
+            logging.info(str(region_code) + ' Base Endpoint selected.')
+        else:
+            logging.error('Invalid region code provided')
+            raise
+
+        # These are used when generating access tokens
+        self.tenant_id = tenant_id
+        self.app_id = app_id
+        self.app_secret = app_secret
+
+        # Set an empty access_token variable for later.
+        self.access_token = ''
+
+        # Set an empty timeout variable to track the timeout of the current token. EPOCH format.
+        self.timeout = 0
+
+        # Setting headers.
+        #self.headers = {
+        #    'Accept': 'application/json',
+        #    'Authorization': 'Bearer ' + self.access_token  # TODO: Check if the token is still valid
+        #}
+
+    @staticmethod
+    def get_headers(access_token):
+        """ Returns a dict containing the necessary headers. """
+        headers = {
+            'Accept': 'application/json',
+            'Authorization': 'Bearer ' + str(access_token)
+        }
+
+        return headers
+
+    @staticmethod
+    def resp_code_check(response_code):
+        """
+            This method take a response code from a Cylance API request. Checks it for success, and returns an
+            exception if the response returns an error, True if the response is 200, or False if the response errored
+            with anything else.
+
+            # TODO: Borderline useless. Do something better this time. Return an exception, or
+
+        :param response_code:
+        :return:
+        """
+
+        if response_code == 400:
+            raise exception.Response400Error
+        elif response_code == 401:
+            raise exception.Response401Error
+        elif response_code == 403:
+            raise exception.Response403Error
+        elif response_code == 404:
+            return exception.Response404Error
+        elif response_code == 409:
+            raise exception.Response409Error
+        elif response_code == 500:
+            raise exception.Response500Error
+        elif response_code == 501:
+            raise exception.Response501Error
+        elif response_code == 200:
+            return True
+        else:
+            raise exception.ResponseError(response_code)
+
+    def token_timeout_check(self):
+        """
+
+        :return:
+        """
+        now = datetime.utcnow()
+        epoch_now = int((now - datetime(1970, 1, 1)).total_seconds())
+
+        if epoch_now >= self.timeout:
+            return True
+        else:
+            return False
+
+    def get_access_token(self, timeout=1800):
+        """
+
+        :return:
+        """
+        # The longest time-span a token can have is 30 minutes.
+        if timeout > 1800:
+            logging.error('The longest time-span a token can have is 1800 seconds (30 minutes)')
+            print('[!] Timeout can not exceed 1800 seconds')  # TODO: Replace with exception.
+
+        else:
+            # Create some time variables to set token expiry and issued time
+            now_utc = datetime.utcnow()
+            timeout_datetime = now_utc + timedelta(seconds=timeout)
+            epoch_time = int((now_utc - datetime(1970, 1, 1)).total_seconds())
+            self.timeout = int((timeout_datetime - datetime(1970, 1, 1)).total_seconds())
+
+            # This is used to generate a unique identifier for each token.
+            jti_val = str(uuid.uuid4())
+
+            # Claims are part of the JWT request.
+            claims = {
+                'exp': self.timeout,
+                'iat': epoch_time,
+                'iss': 'http://cylance.com',  # Issuer-Don't Change It
+                'sub': self.app_id,
+                'tid': self.tenant_id,
+                'jti': jti_val  # SECURITY: Store this in a DB table and check against each access attempt to detect impersonation attacks.
+                # 'scp' :
+            }
+
+            # Encode the request with JWT.
+            encoded_req = jwt.encode(claims, self.app_secret, algorithm='HS256')
+
+            payload = {'auth_token': str(encoded_req, 'utf-8')}
+            headers = {'Content-Type': 'application/json; charset=utf-8'}
+            response = requests.post(str(self.base_endpoint + services['auth'] + 'token'), headers=headers,
+                                     data=json.dumps(payload))
+
+            if self.resp_code_check(response.status_code):
+                response_content = json.loads(response.content)
+                # Set access token.
+                self.access_token = response_content['access_token']
+
+    def create_user(self, email, user_role, first_name, last_name, zones=[]):
+        """
+        Create a new console user. Requires a unique e-mail address.
+
+             {
+             "email": "string",
+             "user_role": "string",
+             "first_name": "string",  # max 64 chars
+             "last_name": "string",  # max 64 chars
+             "zones": [  # If the user_role is Admin, this doesn't matter.
+               "id": "string",
+               "role_type", "string"
+               "role_name", "string"
+              ]
+            }
+
+        :param email: string
+        :param user_role: string
+        :param first_name: string
+        :param last_name: string
+        :param zones: dictionary
+        :return:
+        """
+
+    def get_users(self, page_num=0, page_size=200):
+        """
+            Request a page with a list of users. Sorted by created date, in descending order.
 
 
-def store_threats(threats_list):
-    """
+        :return:
+        """
+        users = []
 
-    :return:
-    """
-    postgres_query = 'INSERT INTO cy_threats (name,sha256,md5,cylance_score,av_industry,classification,sub_class,' \
-                     'global_quarantine,safelist,file_size,unique_to_cylance,last_found,logged_time) VALUES %s'
-    execute_values(postgres_curs, postgres_query, threats_list)
+        # If the page number is less than 1, we have to loop through the pages to get them all
+        if page_num == 0:
+            # Set the current page to 1
+            current_page = 1
 
-    if postgres_conn.commit():
-        print('[*] Non-reporting devices saved to Postgres DB.')
+            # Generate a new access token before each request for security.
+            self.get_access_token()
+
+            while True:
+                # Set the initial page and the maximum page_size.
+                params = {
+                    'page': current_page,
+                    'page_size': page_size
+                }
+
+                response = requests.get(str(self.base_endpoint + services['users']), params=params)
+
+                if self.resp_code_check(response.status_code):
+                    if response.content['page_items']:
+                        content = json.loads(response.content)
+                        users.append(content[0])
+                        # TODO: Comment this.
+                        current_page += 1
+
+                    else:
+                        break
+
+        else:
+            # Set the parameters of the request.
+            params = {
+                'page': page_num,
+                'page_size': page_size
+            }
+
+            # Generate a new access token before each request for security.
+            self.get_access_token()
+            response = requests.get(str(self.base_endpoint + services['users']), params=params)
+
+            # Validates the response code, and returns an exception if the request is not a success.
+            if self.resp_code_check(response.status_code):
+                content = json.loads(response.content)
+                users = content[0]
+
+        return users
+
+    def get_user(self, identifier):
+        """
+            Request a specific console user.
+
+            The identifier can be either a user_id or an email address.
+
+        :return:
+        """
+        # Generate a new access token before each request for security.
+        self.get_access_token()
+        response = requests.get(str(self.base_endpoint + services['users'] + identifier), headers=self.headers)
+
+        # Validates the response code, and returns an exception if the request is not a success.
+        if self.resp_code_check(response.status_code):
+            content = json.loads(response.content)
+            return content[0]
+
+    def update_user(self):
+        """
+            Update a console user.
+        :return:
+        """
+        # TODO
+
+    def delete_user(self):
+        """
+            Delete a console user
+        :return:
+        """
+        # TODO
+
+    def send_invite_email(self):
+        """
+
+        :return:
+        """
+        # TODO
+
+    def send_reset_pass_email(self):
+        """
+
+        :return:
+        """
+        # TODO
+
+    def get_devices(self, page_num=0, page_size=200):
+        """
+            Request a page with a list of a device resources. Sorted by created date in descending order.
+
+            {
+              "page_number": 0,
+              "page_size": 0,
+              "total_pages": 0,
+              "total_number_of_items": 0,
+              "page_items": [
+                {
+                  "id": "string",
+                   "name”: “string",
+                   "state": “string",
+                   "agent_version": "string",
+                   "policy": {
+                     “id": "string",
+                      “name": "string"
+                  },
+                  "date_first_registered": "2017-07-28T16:35:46.081Z",
+                  “ip_addresses”: [
+                     “string1”,
+                     “string2” ],
+                  “mac_addresses”: [
+                     “string1”,
+                     “string2” ]
+                }
+              ]
+            }
+        :return:
+        """
+        devices = []
+
+        # If the page number is less than 1, we have to loop through the pages to get them all
+        if page_num == 0:
+            # Set the current page to 1
+            current_page = 1
+            while True:
+                # Set the initial page and the maximum page_size.
+                params = {
+                    'page': current_page,
+                    'page_size': page_size
+                }
+
+                # Generate a new access token before each request for security.
+                self.get_access_token()
+                response = requests.get(str(self.base_endpoint + services['devices']),
+                                        headers=self.get_headers(self.access_token),
+                                        params=params)
+                content = json.loads(response.content)
+
+                if self.resp_code_check(response.status_code):
+                    # If there are page_items in the content then cycle through them and add them to the list.
+                    if content['page_items']:
+                        for item in content['page_items']:
+                            devices.append(item)
+                        current_page += 1
+
+                    else:
+                        break
+
+        else:
+            # Set the parameters of the request.
+            params = {
+                'page': page_num,
+                'page_size': page_size
+            }
+
+            # Generate a new access token before each request for security.
+            self.get_access_token()
+            response = requests.get(str(self.base_endpoint + services['devices']), headers=self.get_headers(self.access_token), params=params)
+            content = json.loads(response.content)
+
+            # Validates the response code, and returns an exception if the request is not a success.
+            if self.resp_code_check(response.status_code):
+                # If there are page_items in the content then cycle through them and add them to the list.
+                if content['page_items']:
+                    for item in content['page_items']:
+                        devices.append(item)
+
+        return devices
+
+    def get_device(self, device_id):
+        """
+            Request information on a device.
+
+            {
+                "id": "string",
+                 "name": "string",
+                 "host_name": "string",
+                 "os_version": "string",
+                 "state": "string",
+                 "agent_version": "string",
+                 "policy": {
+                    “id": "string",
+                     “name": "string"
+                },
+                "last_logged_in_user": "string",
+                "update_type": "string",
+                "update_available": true,
+                "background_detection": true,
+                "is_safe": true,
+                "date_first_registered": "2017-06-15T18:02:45.714Z",
+                "date_offline": "2017-06-15T18:02:45.714Z",
+                "date_last_modified": "2017-06-15T18:02:45.714Z",
+                  “ip_addresses”: [
+                     “string1”,
+                     “string2” ],
+                  “mac_addresses”: [
+                     “string1”,
+                     “string2” ]
+            }
+        :return:
+        """
+
+        # Generate a new access token before each request for security.
+        self.get_access_token()
+        response = requests.get(str(self.base_endpoint + services['devices'] + device_id), headers=self.get_headers(self.access_token))
+        content = json.loads(response.content)
+
+        # Validates the response code, and returns an exception if the request is not a success.
+        if self.resp_code_check(response.status_code):
+            if content['page_items']:
+                for item in content['page_items']:
+                    return item
+
+    def update_device(self, device_id):
+        """
+            Update a console device
+        :return:
+        """
+        # TODO
+
+    def get_device_threats(self, device_id, page_num=0, page_size=200):
+        """
+            Requests a page with a list of threats found on a specific device.
+
+            {
+                "page_number": 0,
+                "page_size": 0,
+                "total_pages": 0,
+                "total_number_of_items": 0,
+                "page_items": [
+                    {
+                        "name": "string",
+                        "sha256”: “string",
+                        "file_status": 0,
+                        "file_path": "string",
+                        "cylance_score": 0,
+                        "classification": "string",
+                        "sub_classification": "string",
+                        "date_found": "2017-06-15T18:02:45.714Z"
+                    }
+                ]
+            }
+
+        :param device_id:
+        :return:
+        """
+        device_threats = []
+
+        # If the page number is less than 1, we have to loop through the pages to get them all
+        if page_num == 0:
+            # Set the current page to 1
+            current_page = 1
+
+            while True:
+                # Set the initial page and the maximum page_size.
+                params = {
+                    'page': current_page,
+                    'page_size': page_size
+                }
+
+                # Generate a new access token before the entire request for security.
+                self.get_access_token()
+                response = requests.get(str(self.base_endpoint + services['devices'] + device_id + '/threats'), headers=self.get_headers(self.access_token), params=params)
+                content = json.loads(response.content)
+
+                if self.resp_code_check(response.status_code):
+                    if content['page_items']:
+                        for item in content['page_items']:
+                            device_threats.append(item)
+                        current_page += 1
+
+                    else:
+                        break
+
+        else:
+            # Set the parameters of the request.
+            params = {
+                'page': page_num,
+                'page_size': page_size
+            }
+
+            # Generate a new access token before each request for security.
+            self.get_access_token()
+            response = requests.get(str(self.base_endpoint + services['devices'] + device_id + '/threats'), headers=self.get_headers(self.access_token), params=params)
+            content = json.loads(response.content)
+
+            # Validates the response code, and returns an exception if the request is not a success.
+            if self.resp_code_check(response.status_code):
+                if content['page_items']:
+                    for item in content['page_items']:
+                        device_threats.append(item)
+
+        return device_threats
+
+    def get_zone_devices(self, zone_id, page_num=0, page_size=200):
+        """
+
+        :return:
+        """
+        """
+                    Request a page with a list of a device resources. Sorted by created date in descending order.
+
+                    {
+                      "page_number": 0,
+                      "page_size": 0,
+                      "total_pages": 0,
+                      "total_number_of_items": 0,
+                      "page_items": [
+                        {
+                          "id": "string",
+                           "name”: “string",
+                           "state": “string",
+                           "agent_version": "string",
+                           "policy": {
+                             “id": "string",
+                              “name": "string"
+                          },
+                          "date_first_registered": "2017-07-28T16:35:46.081Z",
+                          “ip_addresses”: [
+                             “string1”,
+                             “string2” ],
+                          “mac_addresses”: [
+                             “string1”,
+                             “string2” ]
+                        }
+                      ]
+                    }
+                :return:
+                """
+        zone_devices = []
+
+        # If the page number is less than 1, we have to loop through the pages to get them all
+        if page_num == 0:
+            # Set the current page to 1
+            current_page = 1
+            while True:
+                # Set the initial page and the maximum page_size.
+                params = {
+                    'page': current_page,
+                    'page_size': page_size
+                }
+
+                # Generate a new access token before each request for security.
+                self.get_access_token()
+                response = requests.get(str(self.base_endpoint + services['devices'] + zone_id + '/devices'), params=params)
+
+                if self.resp_code_check(response.status_code):
+                    if response.content['page_items']:
+                        content = json.loads(response.content)
+                        zone_devices.append(content[0])
+                        # TODO: Comment this.
+                        current_page += 1
+
+                    else:
+                        break
+
+        else:
+            # Set the parameters of the request.
+            params = {
+                'page': page_num,
+                'page_size': page_size
+            }
+
+            # Generate a new access token before each request for security.
+            self.get_access_token()
+            response = requests.get(str(self.base_endpoint + services['devices']), params=params)
+
+            # Validates the response code, and returns an exception if the request is not a success.
+            if self.resp_code_check(response.status_code):
+                content = json.loads(response.content)
+                zone_devices = content[0]
+
+        return zone_devices
+
+    def get_agent_installer_link(self, product, os, package, architecture, build):
+        """
+            • product: Specify the Cylance product installer to download. The allo
+             • Protect
+             • Optics
+            • os: Specify the operating system (OS) family. The allo
+             • CentOS7
+             • Linux
+             • Mac
+             • Ubuntu1404
+             • Ubuntu1604
+             • Windows
+            • architecture (required for Windows and macOS): Specify the tar
+            values are:
+             • X86
+             • X64
+             • CentOS6
+             • CentOS6UI
+             • CentOS7
+             • CentOS7UI
+             • Ubuntu1404
+             • Ubuntu1404UI
+             • Ubuntu1604
+             • Ubuntu1604UI
+            • package (required for Windows and macOS): Specify the installer f
+             • Exe (Windows only)
+             • Msi (Windows only)
+             • Dmg (macOS only)
+             • Pkg (macOS only)
+            • build (optional): The Agent version. Example: 1480.
+
+        :return:
+
+        """
+        params = {
+            'product': product,
+            'os': os,
+            'package': package,
+            'architecture': architecture,
+            'build': build  # optional
+        }
+
+        # set an access token
+        self.get_access_token()
+        response = requests.get(str(self.base_endpoint + services['devices'] + 'installer'), params=params)
+
+        if self.resp_code_check(response.status_code):
+            content = json.loads(response.content)
+            return content[0]
+
+    def update_device_threat(self, device_id):
+        """
+            Waive or Quarantine a convicted threat on a device.
+        :param device_id:
+        :return:
+        """
+        # TODO
+
+    def delete_devices(self, callback_url, device_ids=[]):
+        """
+            Delete one or more devices from an organization.
 
 
-def store_gbl_list(items_list, listtype):
-    """
+        :return:
+        """
+        if not callback_url:
+            data = {
+                'device_ids': device_ids,
+            }
+        else:
+            data = {
+                'device_ids': device_ids,
+                'callback_url': callback_url
+            }
 
-    :return:
-    """
+        # Generate a new access token before each request for security.
+        self.get_access_token()
+        response = requests.delete(str(self.base_endpoint + services['devices']), data=data)
 
-    if listtype == 0:
-        table = 'cy_quarantine'
-    elif listtype == 1:
-        table = 'cy_safelist'
+        if self.resp_code_check(response.status_code):
+            content = json.loads(response.content)
+            confirmation = content[0]
 
-    postgres_query = 'INSERT INTO ' + table + ' (name,sha256,md5,cylance_score,av_industry,classification,sub_class,' \
-                     'list_type,category,added,added_by,reason,logged_time) VALUES %s ON CONFLICT (sha256) DO UPDATE' \
-                     ' SET name=EXCLUDED.name,sha256=EXCLUDED.sha256,md5=EXCLUDED.md5,cylance_score=EXCLUDED.cylance_score,' \
-                     'av_industry=EXCLUDED.av_industry,classification=EXCLUDED.classification,sub_class=EXCLUDED.sub_class,' \
-                     'list_type=EXCLUDED.list_type,category=EXCLUDED.category,added=EXCLUDED.added,added_by=EXCLUDED.added_by,' \
-                     'reason=EXCLUDED.reason,logged_time=EXCLUDED.logged_time'
+            return confirmation
 
-    execute_values(postgres_curs, postgres_query, items_list)
+    def get_device_by_mac(self, mac_address):
+        """
+            Request a device resource by using a MAC address.
+        :param mac_address:
+        :return:
+        """
+        # TODO
 
-    if postgres_conn.commit():
-        print('[*] Global list saved to Postgres DB.')
+    def get_global_list(self, list_type, page_num=0, page_size=200):
+        """
+            Get a list of global list resources.
 
+            {
+              "page_number": 0,
+              "page_size": 0,
+              "total_pages": 0,
+              "total_number_of_items": 0,
+              "page_items": [
+                {
+                  "name": "string",
+                  "sha256": "string",
+                  "md5": "string",
+                  "cylance_score": 0,
+                  "av_industry": 0,
+                  "classification": "string",
+                  "sub_classification": "string",
+                  "list_type": "string",
+                  "category": "string",
+                  "added": "2017-05-22T23:35:56.705Z",
+                  "added_by": "string",
+                  "reason": "string"
+                }
+              ]
+            }
 
-if __name__ == '__main__':
-    main()
+            list_type = 0 or 1 (0 = Global Quarantine :: 1 = Global Safe)
+
+        :param list_type:
+        :return:
+        """
+        if 0 != list_type != 1:
+            raise exception.InvalidListType
+
+        glist = []
+
+        # If the page number is less than 1, we have to loop through the pages to get them all
+        if page_num == 0:
+            # Set the current page to 1
+            current_page = 1
+
+            while True:
+                # Set the initial page and the maximum page_size.
+                params = {
+                    'page': current_page,
+                    'page_size': page_size,
+                    'listTypeId': list_type
+                }
+
+                # Generate a new access token before each request for security.
+                self.get_access_token()
+                response = requests.get(str(self.base_endpoint + services['globallists']),
+                                        headers=self.get_headers(self.access_token),
+                                        params=params)
+                content = json.loads(response.content)
+
+                if self.resp_code_check(response.status_code):
+                    if content['page_items']:
+                        for item in content['page_items']:
+                            glist.append(item)
+                        current_page += 1
+
+                    else:
+                        break
+
+        else:
+            # Set the parameters of the request.
+            params = {
+                'page': page_num,
+                'page_size': page_size,
+                'listTypeId': list_type
+            }
+
+            # Generate a new access token before each request for security.
+            self.get_access_token()
+            response = requests.get(str(self.base_endpoint + services['globallists']),
+                                    headers=self.get_headers(self.access_token),
+                                    params=params)
+            content = json.loads(response.content)
+
+            # Validates the response code, and returns an exception if the request is not a success.
+            if self.resp_code_check(response.status_code):
+                if content['page_items']:
+                    for item in content['page_items']:
+                        glist = item
+
+        return glist
+
+    def add_global_list(self, sha256_hash, list_type, category, reason):
+        """
+            Add to a global list
+        :return:
+        """
+        if 0 != list_type != 1:
+            raise exception.InvalidListType
+
+        if 64 > len(sha256_hash) > 64:  # TODO: Find better ways of checking for valid user input so that it is more exact.
+            raise exception.InvalidSHA256Error
+
+        request = {
+            'sha256': sha256_hash,
+            'list_type': list_type,
+            'category': category,
+            'reason': reason
+        }
+
+        # Generate a new access token before each request for security.
+        self.get_access_token()
+        response = requests.post(str(self.base_endpoint + services['globallists']), data=request)
+
+        if self.resp_code_check(response.status_code):
+            content = json.loads(response.content)
+            confirmation = content[0]
+
+            return confirmation
+
+    def delete_global_list(self, list_type, sha256_hash):
+        """
+            Delete from a global list
+        :return:
+        """
+        if 0 != list_type != 1:
+            raise exception.InvalidListType
+
+        if 64 > len(sha256_hash) > 64:  # TODO: Find better ways of checking for valid user input so that it is more exact.
+            raise exception.InvalidSHA256Error
+
+        request = {
+            'sha256': sha256_hash,
+            'list_type': list_type,
+        }
+
+        # Generate a new access token before each request for security.
+        self.get_access_token()
+        response = requests.delete(str(self.base_endpoint + services['globallists']), data=request)
+
+        if self.resp_code_check(response.status_code):
+            content = json.loads(response.content)
+            confirmation = content[0]
+
+            return confirmation
+
+    def get_threat(self, sha256_hash):
+        """
+            Request threat details on a specific hash
+        :param sha256_hash:
+        :return:
+        """
+        if 64 > len(sha256_hash) > 64:
+            raise exception.InvalidSHA256Error
+
+        else:
+            # Generate a new access token before each request for security.
+            self.get_access_token()
+            response = requests.get(str(self.base_endpoint + services['threats'] + sha256_hash), headers=self.headers)
+
+            # Validates the response code, and returns an exception if the request is not a success.
+            if self.resp_code_check(response.status_code):
+                content = json.loads(response.content)
+                return content[0]
+
+    def get_threats(self, page_num=0, page_size=200):
+        """
+            Request a page with a list of console threat resources. Sorted by last found date, in descending order.
+
+        Response
+        {
+            "page_number": 0,
+            "page_size": 0,
+            "total_pages": 0,
+            "total_number_of_items": 0,
+            "page_items": [
+                {
+                    "name": "string",
+                    "sha256": "string",
+                    "md5": "string",
+                    "cylance_score": 0,
+                    "av_industry": 0,
+                    "classification": "string",
+                    "sub_classification": "string",
+                    "global_quarantined": true,
+                    "safelisted": true,
+                    "file_size": 0,
+                    "unique_to_cylance": true
+                    "last_found": "2017-06-15T21:35:11.994Z"
+                }
+            ]
+        }
+        :return:
+        """
+        threats = []
+
+        # If the page number is less than 1, we have to loop through the pages to get them all
+        if page_num == 0:
+            # Set the current page to 1
+            current_page = 1
+
+            while True:
+                # Set the initial page and the maximum page_size.
+                params = {
+                    'page': current_page,
+                    'page_size': page_size
+                }
+
+                # Generate a new access token before the entire request for security.
+                self.get_access_token()
+                response = requests.get(str(self.base_endpoint + services['threats']),
+                                        headers=self.get_headers(self.access_token),
+                                        params=params)
+                content = json.loads(response.content)
+
+                if self.resp_code_check(response.status_code):
+                    if content['page_items']:
+                        for item in content['page_items']:
+                            threats.append(item)
+                        current_page += 1
+
+                    else:
+                        break
+
+        else:
+            # Set the parameters of the request.
+            params = {
+                'page': page_num,
+                'page_size': page_size
+            }
+
+            # Generate a new access token before each request for security.
+            self.get_access_token()
+            response = requests.get(str(self.base_endpoint + services['threats']), headers=self.get_headers(self.access_token), params=params)
+            content = json.loads(response.content)
+
+            # Validates the response code, and returns an exception if the request is not a success.
+            if self.resp_code_check(response.status_code):
+                if content['page_items']:
+                    for item in content['page_items']:
+                        threats.append(item)
+
+        return threats
+
+    def get_threat_devices(self, hash_, page_num=0, page_size=200):
+        """
+           Request a list of MAC addresses and IP addresses associated with a specific threat(hash).
+
+           Response
+           {
+                "page_number": 0,
+                "page_size": 0,
+                "total_pages": 0,
+                "total_number_of_items": 0,
+                "page_items": [
+                    {
+                        "id": "string",
+                        "name": "string",
+                        "state": "Offline",
+                        "agent_version": "string",
+                        "policy_id": "string",
+                        "date_found": "2017-06-15T21:35:11.994Z",
+                        "file_status": "Quarantined",
+                        "file_path": "string",
+                        "ip_addresses": [
+                            "string1",
+                            "string2" ],
+                        "mac_addresses": [
+                            "string1”,
+                            "string2” ]
+                    }
+                ]
+            }
+
+        :param hash:
+        :return:
+        """
+        devices = []
+
+        # If the page number is less than 1, we have to loop through the pages to get them all
+        if page_num == 0:
+            # Set the current page to 1
+            current_page = 1
+
+            # Generate a new access token before the entire request for security.
+            self.get_access_token()
+
+            while True:
+                # Set the initial page and the maximum page_size.
+                params = {
+                    'page': current_page,
+                    'page_size': page_size
+                }
+
+                response = requests.get(str(self.base_endpoint + services['threats'] + hash_ + '/devices'), params=params)
+
+                if self.resp_code_check(response.status_code):
+                    if response.content['page_items']:
+                        content = json.loads(response.content)
+                        devices.append(content[0])
+                        # TODO: Comment this.
+                        current_page += 1
+
+                    else:
+                        break
+
+        else:
+            # Set the parameters of the request.
+            params = {
+                'page': page_num,
+                'page_size': page_size
+            }
+
+            # Generate a new access token before each request for security.
+            self.get_access_token()
+            response = requests.get(str(self.base_endpoint + services['threats'] + hash_ + '/devices'), params=params)
+
+            # Validates the response code, and returns an exception if the request is not a success.
+            if self.resp_code_check(response.status_code):
+                content = json.loads(response.content)
+                devices = content[0]
+
+        return devices
+
+    def get_threat_download_link(self, hash_):
+        """
+
+        :return:
+        """
+        # set an access token
+        self.get_access_token()
+        response = requests.get(str(self.base_endpoint + services['threats'] + 'download/' + hash_))
+
+        if self.resp_code_check(response.status_code):
+            content = json.loads(response.content)
+            return content[0]
+
+    def get_zones(self, page_num=0, page_size=200):
+        """
+            {
+                "page_number": 0,
+                "page_size": 0,
+                "total_pages": 0,
+                "total_number_of_items": 0,
+                "page_items": [
+                    {
+                        "id": "string",
+                        "name": "string",
+                        "criticality": "string",
+                        "zone_rule_id": "string",
+                        "policy_id": "string",
+                        “update_type”: “string”,
+                        "date_created": "2017-06-15T21:35:11.994Z",
+                        "date_modified": "2017-06-15T21:35:11.994Z"
+                    }
+                ]
+            }
+        :return:
+        """
+        zones = []
+
+        # If the page number is less than 1, we have to loop through the pages to get them all
+        if page_num == 0:
+            # Set the current page to 1
+            current_page = 1
+
+            # Generate a new access token before each request for security.
+            self.get_access_token()
+
+            while True:
+                # Set the initial page and the maximum page_size.
+                params = {
+                    'page': current_page,
+                    'page_size': page_size
+                }
+
+                response = requests.get(str(self.base_endpoint + services['zones']), params=params)
+
+                if self.resp_code_check(response.status_code):
+                    if response.content['page_items']:
+                        content = json.loads(response.content)
+                        zones.append(content[0])
+                        # TODO: Comment this.
+                        current_page += 1
+
+                    else:
+                        break
+
+        else:
+            # Set the parameters of the request.
+            params = {
+                'page': page_num,
+                'page_size': page_size
+            }
+
+            # Generate a new access token before each request for security.
+            self.get_access_token()
+            response = requests.get(str(self.base_endpoint + services['zones']), params=params)
+
+            # Validates the response code, and returns an exception if the request is not a success.
+            if self.resp_code_check(response.status_code):
+                content = json.loads(response.content)
+                zones = content[0]
+
+        return zones
+
+    def get_device_zones(self, device_id, page_num=0, page_size=200):
+        """
+            {
+                "page_number": 0,
+                "page_size": 0,
+                "total_pages": 0,
+                "total_number_of_items": 0,
+                "page_items": [
+                    {
+                        "id": "string",
+                        "name": "string",
+                        "criticality": "string",
+                        "zone_rule_id": "string",
+                        "policy_id": "string",
+                        “update_type”: “string”,
+                        "date_created": "2017-06-15T21:35:11.994Z",
+                        "date_modified": "2017-06-15T21:35:11.994Z"
+                    }
+                ]
+            }
+
+        :param device_id:
+        :param page_num:
+        :param page_size:
+        :return:
+        """
+        # TODO: Check for a valid device_id
+
+        zones = []
+
+        # If the page number is less than 1, we have to loop through the pages to get them all
+        if page_num == 0:
+            # Set the current page to 1
+            current_page = 1
+
+            # Generate a new access token before this request, for security.
+            self.get_access_token()
+
+            while True:
+                # Set the initial page and the maximum page_size.
+                params = {
+                    'page': current_page,
+                    'page_size': page_size
+                }
+
+                response = requests.get(str(self.base_endpoint + services['zones'] + device_id + '/zones'), params=params)
+
+                if self.resp_code_check(response.status_code):
+                    if response.content['page_items']:
+                        content = json.loads(response.content)
+                        zones.append(content[0])
+                        # TODO: Comment this.
+                        current_page += 1
+
+                    else:
+                        break
+
+        else:
+            # Set the parameters of the request.
+            params = {
+                'page': page_num,
+                'page_size': page_size
+            }
+
+            # Generate a new access token before each request for security.
+            self.get_access_token()
+            response = requests.get(str(self.base_endpoint + services['zones'] + device_id + '/zones'), params=params)
+
+            # Validates the response code, and returns an exception if the request is not a success.
+            if self.resp_code_check(response.status_code):
+                content = json.loads(response.content)
+                zones = content[0]
+
+        return zones
+
+    def get_zone(self, device_id):
+        """
+            Request threat details on a specific hash
+        :param device_id:
+        :return:
+        """
+        # TODO: Check for a valid device_id
+
+        # Generate a new access token before each request for security.
+        self.get_access_token()
+        response = requests.get(str(self.base_endpoint + services['zones'] + device_id), headers=self.headers)
+
+        # Validates the response code, and returns an exception if the request is not a success.
+        if self.resp_code_check(response.status_code):
+            content = json.loads(response.content)
+            return content[0]
+
+    def create_zone(self):
+        """
+
+        :return:
+        """
+        # TODO
+
+    def update_zone(self):
+        """
+
+        :return:
+        """
+        # TODO
+
+    def delete_zone(self, zone_id):
+        """
+
+        :return:
+        """
+        # TODO: Create an exception like the commented one below to check for a valid zone_id
+        # if 64 > len(
+        #         sha256_hash) > 64:  # TODO: Find better ways of checking for valid user input so that it is more exact.
+        #     raise exception.InvalidSHA256Error
+
+        # Generate a new access token before each request, for security.
+        self.get_access_token()
+        response = requests.delete(str(self.base_endpoint + services['zones'] + zone_id))
+
+        if self.resp_code_check(response.status_code):
+            content = json.loads(response.content)
+            confirmation = content[0]
+
+            return confirmation
