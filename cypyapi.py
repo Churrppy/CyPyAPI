@@ -230,9 +230,6 @@ class CyPyAPI:
             # Set the current page to 1
             current_page = 1
 
-            # Generate a new access token before each request for security.
-            self.get_access_token()
-
             while True:
                 # Set the initial page and the maximum page_size.
                 params = {
@@ -240,17 +237,20 @@ class CyPyAPI:
                     'page_size': page_size
                 }
 
-                response = requests.get(str(self.base_endpoint + services['users']), params=params)
+                # Generate a new access token before each request for security.
+                self.get_access_token()
+                response = requests.get(str(self.base_endpoint + services['users']),
+                                        headers=self.get_headers(self.access_token),
+                                        params=params)
+                content = json.loads(response.content)
 
-                if self.resp_code_check(response.status_code):
-                    if response.content['page_items']:
-                        content = json.loads(response.content)
-                        users.append(content[0])
-                        # TODO: Comment this.
-                        current_page += 1
+                if self.resp_code_check(response.status_code) and content['page_items']:
+                    for item in content['page_items']:
+                        users.append(item)
+                    current_page += 1
 
-                    else:
-                        break
+                else:
+                    break
 
         else:
             # Set the parameters of the request.
@@ -261,12 +261,15 @@ class CyPyAPI:
 
             # Generate a new access token before each request for security.
             self.get_access_token()
-            response = requests.get(str(self.base_endpoint + services['users']), params=params)
+            response = requests.get(str(self.base_endpoint + services['users']),
+                                    headers=self.get_headers(self.access_token),
+                                    params=params)
+            content = json.loads(response.content)
 
             # Validates the response code, and returns an exception if the request is not a success.
-            if self.resp_code_check(response.status_code):
-                content = json.loads(response.content)
-                users = content[0]
+            if self.resp_code_check(response.status_code) and content['page_items']:
+                for item in content['page_items']:
+                    users.append(item)
 
         return users
 
@@ -280,12 +283,14 @@ class CyPyAPI:
         """
         # Generate a new access token before each request for security.
         self.get_access_token()
-        response = requests.get(str(self.base_endpoint + services['users'] + identifier), headers=self.headers)
+        response = requests.get(str(self.base_endpoint + services['users'] + identifier),
+                                headers=self.get_headers(self.access_token))
+        content = json.loads(response.content)
 
         # Validates the response code, and returns an exception if the request is not a success.
-        if self.resp_code_check(response.status_code):
-            content = json.loads(response.content)
-            return content[0]
+        if self.resp_code_check(response.status_code) and content['page_items']:
+            for item in content['page_items']:
+                return item
 
     def update_user(self):
         """
@@ -366,15 +371,13 @@ class CyPyAPI:
                                         params=params)
                 content = json.loads(response.content)
 
-                if self.resp_code_check(response.status_code):
-                    # If there are page_items in the content then cycle through them and add them to the list.
-                    if content['page_items']:
-                        for item in content['page_items']:
-                            devices.append(item)
-                        current_page += 1
+                if self.resp_code_check(response.status_code) and content['page_items']:
+                    for item in content['page_items']:
+                        devices.append(item)
+                    current_page += 1
 
-                    else:
-                        break
+                else:
+                    break
 
         else:
             # Set the parameters of the request.
@@ -385,11 +388,13 @@ class CyPyAPI:
 
             # Generate a new access token before each request for security.
             self.get_access_token()
-            response = requests.get(str(self.base_endpoint + services['devices']), headers=self.get_headers(self.access_token), params=params)
+            response = requests.get(str(self.base_endpoint + services['devices']),
+                                    headers=self.get_headers(self.access_token),
+                                    params=params)
             content = json.loads(response.content)
 
             # Validates the response code, and returns an exception if the request is not a success.
-            if self.resp_code_check(response.status_code):
+            if self.resp_code_check(response.status_code) and content['page_items']:
                 # If there are page_items in the content then cycle through them and add them to the list.
                 if content['page_items']:
                     for item in content['page_items']:
@@ -436,10 +441,9 @@ class CyPyAPI:
         content = json.loads(response.content)
 
         # Validates the response code, and returns an exception if the request is not a success.
-        if self.resp_code_check(response.status_code):
-            if content['page_items']:
-                for item in content['page_items']:
-                    return item
+        if self.resp_code_check(response.status_code) and content['page_items']:
+            for item in content['page_items']:
+                return item
 
     def update_device(self, device_id):
         """
@@ -490,17 +494,18 @@ class CyPyAPI:
 
                 # Generate a new access token before the entire request for security.
                 self.get_access_token()
-                response = requests.get(str(self.base_endpoint + services['devices'] + device_id + '/threats'), headers=self.get_headers(self.access_token), params=params)
+                response = requests.get(str(self.base_endpoint + services['devices'] + device_id + '/threats'),
+                                        headers=self.get_headers(self.access_token),
+                                        params=params)
                 content = json.loads(response.content)
 
-                if self.resp_code_check(response.status_code):
-                    if content['page_items']:
-                        for item in content['page_items']:
-                            device_threats.append(item)
-                        current_page += 1
+                if self.resp_code_check(response.status_code) and content['page_items']:
+                    for item in content['page_items']:
+                        device_threats.append(item)
+                    current_page += 1
 
-                    else:
-                        break
+                else:
+                    break
 
         else:
             # Set the parameters of the request.
@@ -511,14 +516,15 @@ class CyPyAPI:
 
             # Generate a new access token before each request for security.
             self.get_access_token()
-            response = requests.get(str(self.base_endpoint + services['devices'] + device_id + '/threats'), headers=self.get_headers(self.access_token), params=params)
+            response = requests.get(str(self.base_endpoint + services['devices'] + device_id + '/threats'),
+                                    headers=self.get_headers(self.access_token),
+                                    params=params)
             content = json.loads(response.content)
 
             # Validates the response code, and returns an exception if the request is not a success.
-            if self.resp_code_check(response.status_code):
-                if content['page_items']:
-                    for item in content['page_items']:
-                        device_threats.append(item)
+            if self.resp_code_check(response.status_code) and content['page_items']:
+                for item in content['page_items']:
+                    device_threats.append(item)
 
         return device_threats
 
@@ -572,17 +578,18 @@ class CyPyAPI:
 
                 # Generate a new access token before each request for security.
                 self.get_access_token()
-                response = requests.get(str(self.base_endpoint + services['devices'] + zone_id + '/devices'), params=params)
+                response = requests.get(str(self.base_endpoint + services['devices'] + zone_id + '/devices'),
+                                        headers=self.get_headers(self.access_token),
+                                        params=params)
+                content = json.loads(response.content)
 
-                if self.resp_code_check(response.status_code):
-                    if response.content['page_items']:
-                        content = json.loads(response.content)
-                        zone_devices.append(content[0])
-                        # TODO: Comment this.
-                        current_page += 1
+                if self.resp_code_check(response.status_code) and response.content['page_items']:
+                    zone_devices.append(content[0])
+                    # TODO: Comment this.
+                    current_page += 1
 
-                    else:
-                        break
+                else:
+                    break
 
         else:
             # Set the parameters of the request.
@@ -593,12 +600,15 @@ class CyPyAPI:
 
             # Generate a new access token before each request for security.
             self.get_access_token()
-            response = requests.get(str(self.base_endpoint + services['devices']), params=params)
+            response = requests.get(str(self.base_endpoint + services['devices']),
+                                    headers=self.get_headers(self.access_token),
+                                    params=params)
+            content = json.loads(response.content)
 
             # Validates the response code, and returns an exception if the request is not a success.
-            if self.resp_code_check(response.status_code):
-                content = json.loads(response.content)
-                zone_devices = content[0]
+            if self.resp_code_check(response.status_code) and content['page_items']:
+                for item in content['page_items']:
+                    zone_devices.append(item)
 
         return zone_devices
 
@@ -646,11 +656,14 @@ class CyPyAPI:
 
         # set an access token
         self.get_access_token()
-        response = requests.get(str(self.base_endpoint + services['devices'] + 'installer'), params=params)
+        response = requests.get(str(self.base_endpoint + services['devices'] + 'installer'),
+                                headers=self.get_headers(self.access_token),
+                                params=params)
+        content = json.loads(response.content)
 
-        if self.resp_code_check(response.status_code):
-            content = json.loads(response.content)
-            return content[0]
+        if self.resp_code_check(response.status_code) and content['page_items']:
+            for item in content['page_items']:
+                return item
 
     def update_device_threat(self, device_id):
         """
@@ -679,13 +692,13 @@ class CyPyAPI:
 
         # Generate a new access token before each request for security.
         self.get_access_token()
-        response = requests.delete(str(self.base_endpoint + services['devices']), data=data)
+        response = requests.delete(str(self.base_endpoint + services['devices']),
+                                   headers=self.get_headers(self.access_token),
+                                   data=data)
+        content = json.loads(response.content)
 
-        if self.resp_code_check(response.status_code):
-            content = json.loads(response.content)
-            confirmation = content[0]
-
-            return confirmation
+        if self.resp_code_check(response.status_code) and content['page_items']:
+            # TODO: I don't know if delete responses include 'page_items'
 
     def get_device_by_mac(self, mac_address):
         """
