@@ -1,10 +1,8 @@
 #! /usr/bin/env Python
 """
-    A Python3 wrapper for the CylanceProtect API.
-
     Author: Justin Robinson
     Version: 1.0
-    Updated: 2019-06-06
+    Updated: 2019-08-21
     Contact: justin@roguetechconsulting.com
 
     Endpoints: Devices, Global List, Policy, Threat, User, Zone
@@ -49,7 +47,7 @@ zone_role_types = {  # TODO: This doesn't currently do anything.
 
 class CyPyAPI:
     """
-
+        A Cylance API Wrapper Class developed with Python 3.7
     """
 
     def __init__(self, tenant_id, app_id, app_secret, region_code='na'):
@@ -76,9 +74,13 @@ class CyPyAPI:
             raise
 
         # These are used when generating access tokens
-        self.tenant_id = tenant_id
-        self.app_id = app_id
-        self.app_secret = app_secret
+        try:
+            self.tenant_id = tenant_id
+            self.app_id = app_id
+            self.app_secret = app_secret
+        except UnboundLocalError as no_assignment:
+            logging.error('Missing Tenant ID, App ID, or App Secret when initiating object creation')
+            exit(2)
 
         # Set an empty access_token variable for later.
         self.access_token = ''
@@ -86,15 +88,9 @@ class CyPyAPI:
         # Set an empty timeout variable to track the timeout of the current token. EPOCH format.
         self.timeout = 0
 
-        # Setting headers.
-        #self.headers = {
-        #    'Accept': 'application/json',
-        #    'Authorization': 'Bearer ' + self.access_token  # TODO: Check if the token is still valid
-        #}
-
     @staticmethod
     def get_headers(access_token):
-        """ Returns a dict containing the necessary headers. """
+        """ Returns a dict containing the headers with an updated access token """
         headers = {
             'Accept': 'application/json',
             'Authorization': 'Bearer ' + str(access_token)
@@ -108,8 +104,6 @@ class CyPyAPI:
             This method take a response code from a Cylance API request. Checks it for success, and returns an
             exception if the response returns an error, True if the response is 200, or False if the response errored
             with anything else.
-
-            # TODO: Borderline useless. Do something better this time. Return an exception, or
 
         :param response_code:
         :return:
@@ -136,12 +130,13 @@ class CyPyAPI:
 
     def token_timeout_check(self):
         """
-
+            This function can be used to check if the current token is expired/timed out. Returns a Bool.
         :return:
         """
         now = datetime.utcnow()
         epoch_now = int((now - datetime(1970, 1, 1)).total_seconds())
 
+        # Return True if the token is still active; False if the token is expired.
         if epoch_now >= self.timeout:
             return True
         else:
@@ -154,8 +149,8 @@ class CyPyAPI:
         """
         # The longest time-span a token can have is 30 minutes.
         if timeout > 1800:
-            logging.error('The longest time-span a token can have is 1800 seconds (30 minutes)')
-            print('[!] Timeout can not exceed 1800 seconds')  # TODO: Replace with exception.
+            logging.error('Maximum token timeout exceeded. Must not exceed 1800 seconds.')
+            raise exception.MaxTimeoutExceeded
 
         else:
             # Create some time variables to set token expiry and issued time
@@ -214,11 +209,11 @@ class CyPyAPI:
         :param zones: dictionary
         :return:
         """
+        # TODO
 
     def get_users(self, page_num=0, page_size=200):
         """
             Request a page with a list of users. Sorted by created date, in descending order.
-
 
         :return:
         """
@@ -1224,7 +1219,7 @@ class CyPyAPI:
         """
         # TODO: Create an exception like the commented one below to check for a valid zone_id
         # if 64 > len(
-        #         sha256_hash) > 64:  # TODO: Find better ways of checking for valid user input so that it is more exact.
+        #         sha256_hash) > 64:
         #     raise exception.InvalidSHA256Error
 
         # Generate a new access token before each request, for security.

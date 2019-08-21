@@ -165,3 +165,16 @@ class InvalidListType(Error):
     def __init__(self):
 
         self.message = 'Invalid List Type. List range is 0 (GlobalQuarantine or 1 (GlobalSafe)'
+
+
+class MaxTimeoutExceeded(Error):
+    """Exception raised for when an invalid base endpoint is selected.
+
+    Attributes:
+           code --
+           message --
+    """
+
+    def __init__(self):
+
+        self.message = 'Max Timeout Exceeded. Maximum timeout must not exceed 1800 seconds.'
