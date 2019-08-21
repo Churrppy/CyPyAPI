@@ -11,15 +11,14 @@
 
 """
 import requests
-import cypyapi.exceptions as exception
+from . import exceptions as exception
 import json
 import jwt
 import uuid
 import logging
-import time
 from datetime import datetime, timedelta
 
-# -------------------------------------------------  VARIABLES  ------------------------------------------------------ #
+# --------------------------------------------  VARIABLES -- CHANGE AS NEEDED  --------------------------------------- #
 region_codes = ['apne1', 'au', 'euc1', 'sae1']
 
 services = {
@@ -172,7 +171,7 @@ class CyPyAPI:
             claims = {
                 'exp': self.timeout,
                 'iat': epoch_time,
-                'iss': 'http://cylance.com',  # Issuer-Don't Change It
+                'iss': 'http://cylance.com',  # Issuer -- Don't Change It
                 'sub': self.app_id,
                 'tid': self.tenant_id,
                 'jti': jti_val  # SECURITY: Store this in a DB table and check against each access attempt to detect impersonation attacks.
@@ -699,6 +698,7 @@ class CyPyAPI:
 
         if self.resp_code_check(response.status_code) and content['page_items']:
             # TODO: I don't know if delete responses include 'page_items'
+            print('FIXING')
 
     def get_device_by_mac(self, mac_address):
         """
