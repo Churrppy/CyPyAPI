@@ -7,6 +7,10 @@
 
     Endpoints: Devices, Global List, Policy, Threat, User, Zone
 
+    Future:
+        - JSON Output Def
+        - Ability to load credentials from file
+
 """
 import requests
 from . import exceptions as exception
@@ -37,6 +41,13 @@ user_roles = {  # TODO: This doesn't currently do anything.
 zone_role_types = {  # TODO: This doesn't currently do anything.
     'zone_manager': '00000000-0000-0000-0000-000000000001',
     'user': '00000000-0000-0000-0000-000000000002'
+}
+
+agent = {
+    'product': ['Protect', 'Optics'],
+    'os': ['CentOS7', 'Linux', 'Mac', 'Ubuntu1404', 'Ubuntu1604', 'Windows'],
+    'architecture': ['X86', 'X64', 'CentOS6', 'CentOS6UI', 'CentOS7', 'CentOS7UI', 'Ubuntu1404', 'Ubuntu1404UI', 'Ubuntu1604', 'Ubuntu1604UI'],
+    'package': ['Exe', 'Msi', 'Dmg', 'Pkg']
 }
 
 # scopes = {
@@ -390,9 +401,8 @@ class CyPyAPI:
             # Validates the response code, and returns an exception if the request is not a success.
             if self.resp_code_check(response.status_code) and content['page_items']:
                 # If there are page_items in the content then cycle through them and add them to the list.
-                if content['page_items']:
-                    for item in content['page_items']:
-                        devices.append(item)
+                for item in content['page_items']:
+                    devices.append(item)
 
         return devices
 
@@ -578,8 +588,8 @@ class CyPyAPI:
                 content = json.loads(response.content)
 
                 if self.resp_code_check(response.status_code) and response.content['page_items']:
-                    zone_devices.append(content[0])
-                    # TODO: Comment this.
+                    for item in content['page_items']:
+                        zone_devices.append(item)
                     current_page += 1
 
                 else:
@@ -606,47 +616,37 @@ class CyPyAPI:
 
         return zone_devices
 
-    def get_agent_installer_link(self, product, os, package, architecture, build):
+    def get_agent_installer_link(self, product, os, package, architecture=None, build=None):
         """
-            • product: Specify the Cylance product installer to download. The allo
-             • Protect
-             • Optics
-            • os: Specify the operating system (OS) family. The allo
-             • CentOS7
-             • Linux
-             • Mac
-             • Ubuntu1404
-             • Ubuntu1604
-             • Windows
-            • architecture (required for Windows and macOS): Specify the tar
-            values are:
-             • X86
-             • X64
-             • CentOS6
-             • CentOS6UI
-             • CentOS7
-             • CentOS7UI
-             • Ubuntu1404
-             • Ubuntu1404UI
-             • Ubuntu1604
-             • Ubuntu1604UI
-            • package (required for Windows and macOS): Specify the installer f
-             • Exe (Windows only)
-             • Msi (Windows only)
-             • Dmg (macOS only)
-             • Pkg (macOS only)
-            • build (optional): The Agent version. Example: 1480.
 
+        :param product:
+        :param os:
+        :param package:
+        :param architecture:
+        :param build:
         :return:
-
         """
-        params = {
-            'product': product,
-            'os': os,
-            'package': package,
-            'architecture': architecture,
-            'build': build  # optional
-        }
+        params = {}
+
+        # Building the parameters
+        if product in agent['product']:
+            params['product'] = product
+
+            if (os == 'Windows' or os == 'Mac') and (architecture is None or package is None):
+                logging.error('Architecture or package missing.')
+            elif os is None:
+                logging.error('No OS type provided')
+            else:
+                params['os'] = os
+
+                if architecture is not None:
+                    params['architecture'] = architecture
+                if package is not None:
+                    params['package'] = package
+                if build is not None:
+                    params['build'] = build
+        else:
+            logging.error('Invalid product. Must be either Protect or Optics.')
 
         # set an access token
         self.get_access_token()
