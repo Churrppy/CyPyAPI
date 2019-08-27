@@ -8,8 +8,12 @@
     Endpoints: Devices, Global List, Policy, Threat, User, Zone
 
     Future:
-        - JSON Output Def
+        - JSON/CSV Output Function
         - Ability to load credentials from file
+        - Check that the access_token has appropriate scope before running the function.
+
+    TODO:
+        - When to use error codes and when to use exceptions
 
 """
 import requests
@@ -29,7 +33,8 @@ services = {
             'threats': 'threats/v2/',
             'devices': 'devices/v2/',
             'globallists': 'globallists/v2/',
-            'zones': 'zones/v2/'
+            'zones': 'zones/v2/',
+            'policies': 'policies/v2/'
         }
 
 user_roles = {  # TODO: This doesn't currently do anything.
@@ -58,7 +63,7 @@ agent = {
 
 class CyPyAPI:
     """
-        A Cylance API Wrapper Class developed with Python 3.7
+        A Cylance API Wrapper Class developed in Python 3.7
     """
 
     def __init__(self, tenant_id, app_id, app_secret, region_code='na'):
@@ -134,7 +139,7 @@ class CyPyAPI:
             raise exception.Response500Error
         elif response_code == 501:
             raise exception.Response501Error
-        elif response_code == 200:
+        elif response_code == 200 or response_code == 202:
             return True
         else:
             raise exception.ResponseError(response_code)
@@ -634,17 +639,31 @@ class CyPyAPI:
 
             if (os == 'Windows' or os == 'Mac') and (architecture is None or package is None):
                 logging.error('Architecture or package missing.')
+                exit(2)
             elif os is None:
                 logging.error('No OS type provided')
+                exit(2)
             else:
                 params['os'] = os
 
                 if architecture is not None:
-                    params['architecture'] = architecture
+                    if architecture in agent['architecture']:
+                        params['architecture'] = architecture
+                    else:
+                        logging.error('Architecture selected does not exist')
+                        exit(2)
                 if package is not None:
-                    params['package'] = package
+                    if package in agent['package']:
+                        params['package'] = package
+                    else:
+                        logging.error('Packaged selected does not exist')
+                        exit(2)
                 if build is not None:
-                    params['build'] = build
+                    if build in agent['build']:
+                        params['build'] = build
+                    else:
+                        logging.error('Build selected does not exist')
+                        exit(2)
         else:
             logging.error('Invalid product. Must be either Protect or Optics.')
 
@@ -667,13 +686,16 @@ class CyPyAPI:
         """
         # TODO
 
-    def delete_devices(self, callback_url, device_ids=[]):
+    def delete_devices(self, callback_url, device_ids=[], method='delete'):
         """
-            Delete one or more devices from an organization.
-
+            This function supports an optional callback_url, as well as a JSON list of device ID's. Maximum 20.
 
         :return:
         """
+        if not device_ids:
+            logging.error('No Device IDs existed in the provided list')
+            exit(2)
+
         if not callback_url:
             data = {
                 'device_ids': device_ids,
@@ -686,22 +708,48 @@ class CyPyAPI:
 
         # Generate a new access token before each request for security.
         self.get_access_token()
-        response = requests.delete(str(self.base_endpoint + services['devices']),
-                                   headers=self.get_headers(self.access_token),
-                                   data=data)
+        if method == 'delete':
+            response = requests.delete(str(self.base_endpoint + services['devices']),
+                                       headers=self.get_headers(self.access_token),
+                                       data=data)
+        elif method == 'post':
+            response = requests.post(str(self.base_endpoint + services['devices'] + 'delete'),
+                                     headers=self.get_headers(self.access_token),
+                                     data=data)
+        else:
+            logging.error('Invalid method selected for this function.')
+            exit(2)
+
         content = json.loads(response.content)
 
-        if self.resp_code_check(response.status_code) and content['page_items']:
-            # TODO: I don't know if delete responses include 'page_items'
-            print('FIXING')
+        if self.resp_code_check(response.status_code):
+            # As long as the response code is 202. The response will contain a request_id.
+            return content['request_id']
 
     def get_device_by_mac(self, mac_address):
         """
             Request a device resource by using a MAC address.
+
+            Formats Accepted:
+            00-00-00-00-00-00
+            00:00:00:00:00:00
+
         :param mac_address:
         :return:
         """
-        # TODO
+        mac_re = r''
+
+        # Generate a new access token before each request for security.
+        self.get_access_token()
+        response = requests.get(str(self.base_endpoint + services['devices'] + 'macaddress/' + mac_address),
+                                headers=self.get_headers(self.access_token))
+        content = json.loads(response.content)
+
+        # Validates the response code, and returns an exception if the request is not a success.
+        if self.resp_code_check(response.status_code) and content['page_items']:
+            for item in content['page_items']:
+                return item
+
 
     def get_global_list(self, list_type, page_num=0, page_size=200):
         """
@@ -1231,3 +1279,80 @@ class CyPyAPI:
             confirmation = content[0]
 
             return confirmation
+
+    def get_policy(self, policy_id):
+        """ """
+        # Generate a new access token before each request for security.
+        self.get_access_token()
+        response = requests.get(str(self.base_endpoint + services['policies'] + policy_id),
+                                headers=self.get_headers(self.access_token))
+        content = json.loads(response.content)
+
+        # Validates the response code, and returns an exception if the request is not a success.
+        if self.resp_code_check(response.status_code) and content['page_items']:
+            for item in content['page_items']:
+                return item
+
+    def get_policies(self, page_num=0, page_size=200):
+        """ """
+        policies = []
+
+        # If the page number is less than 1, we have to loop through the pages to get them all
+        if page_num == 0:
+            # Set the current page to 1
+            current_page = 1
+            while True:
+                # Set the initial page and the maximum page_size.
+                params = {
+                    'page': current_page,
+                    'page_size': page_size
+                }
+
+                # Generate a new access token before each request for security.
+                self.get_access_token()
+                response = requests.get(str(self.base_endpoint + services['policies']),
+                                        headers=self.get_headers(self.access_token),
+                                        params=params)
+                content = json.loads(response.content)
+
+                if self.resp_code_check(response.status_code) and content['page_items']:
+                    for item in content['page_items']:
+                        policies.append(item)
+                    current_page += 1
+
+                else:
+                    break
+
+        else:
+            # Set the parameters of the request.
+            params = {
+                'page': page_num,
+                'page_size': page_size
+            }
+
+            # Generate a new access token before each request for security.
+            self.get_access_token()
+            response = requests.get(str(self.base_endpoint + services['policies']),
+                                    headers=self.get_headers(self.access_token),
+                                    params=params)
+            content = json.loads(response.content)
+
+            # Validates the response code, and returns an exception if the request is not a success.
+            if self.resp_code_check(response.status_code) and content['page_items']:
+                # If there are page_items in the content then cycle through them and add them to the list.
+                for item in content['page_items']:
+                    policies.append(item)
+
+        return policies
+
+    def create_policy(self):
+        """ """
+
+    def update_policy(self):
+        """ """
+
+    def delete_policy(self):
+        """ """
+
+    def delete_policies(self):
+        """ """

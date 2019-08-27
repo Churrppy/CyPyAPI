@@ -86,6 +86,20 @@ class Response409Error(Error):
         self.message = str(self.code) + ' -- Conflict --'
 
 
+class Response413Error(Error):
+    """Exception raised for errors in response.
+
+    Attributes:
+          code -- response code that was returned.
+          message -- explanation of the response code as per the Cylance API documentation.
+    """
+
+    def __init__(self):
+
+        self.code = 413
+        self.message = str(self.code) + ' -- PayloadTooLarge --'
+
+
 class Response429Error(Error):
     """Exception raised for errors in response.
 
