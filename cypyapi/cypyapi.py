@@ -23,6 +23,7 @@ import jwt
 import uuid
 import logging
 from datetime import datetime, timedelta
+import re
 
 # --------------------------------------------  VARIABLES -- CHANGE AS NEEDED  --------------------------------------- #
 region_codes = ['apne1', 'au', 'euc1', 'sae1']
@@ -737,7 +738,12 @@ class CyPyAPI:
         :param mac_address:
         :return:
         """
-        mac_re = r''
+        mac_patt = r'^([0-9A-F]{2}[:-]){5}([0-9A-F]{2})$'
+        mac_re = re.compile(mac_patt)
+
+        if not mac_re.match(mac_address):
+            logging.error('Improperly formatted MAC address')
+            exit(2)
 
         # Generate a new access token before each request for security.
         self.get_access_token()
@@ -746,9 +752,8 @@ class CyPyAPI:
         content = json.loads(response.content)
 
         # Validates the response code, and returns an exception if the request is not a success.
-        if self.resp_code_check(response.status_code) and content['page_items']:
-            for item in content['page_items']:
-                return item
+        if self.resp_code_check(response.status_code):
+            return content
 
 
     def get_global_list(self, list_type, page_num=0, page_size=200):
