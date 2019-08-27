@@ -4,7 +4,7 @@ Python3 Wrapper for the Cylance API v10
 Updates below. Please note that 'Done' DOES NOT mean tested or working.
 
 Status	      Function
-Not Started	  Create User
+* Not Started	  Create User
 Done	        Get Users
 Done	        Get User
 Not Started	  Update User
