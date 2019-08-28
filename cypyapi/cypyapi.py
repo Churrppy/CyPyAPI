@@ -109,8 +109,9 @@ class CyPyAPI:
     def get_headers(access_token):
         """ Returns a dict containing the headers with an updated access token """
         headers = {
-            'Accept': 'application/json',
-            'Authorization': 'Bearer ' + str(access_token)
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "Authorization": "Bearer " + str(access_token)
         }
 
         return headers
@@ -223,10 +224,21 @@ class CyPyAPI:
         :param user_role: string
         :param first_name: string
         :param last_name: string
-        :param zones: dictionary
+        :param zones: list
         :return:
         """
+        # Build the data params DICT to submit
         # TODO
+
+        # Generate a new access token before each request for security.
+        self.get_access_token()
+        response = requests.post(str(self.base_endpoint + services['users']),
+                                 headers=self.get_headers(self.access_token))
+
+        if self.resp_code_check(response.status_code):
+            return True
+        else:
+            return False
 
     def get_users(self, page_num=0, page_size=200):
         """
@@ -310,26 +322,54 @@ class CyPyAPI:
         """
         # TODO
 
-    def delete_user(self):
+    def delete_user(self, user_id):
         """
-            Delete a console user
+            Delete a console user. Return True if successful. False is not.
         :return:
         """
-        # TODO
+        if not user_id:
+            logging.error('No User ID given')
+            exit(2)
 
-    def send_invite_email(self):
+        # Generate a new access token before each request for security.
+        self.get_access_token()
+        response = requests.delete(str(self.base_endpoint + services['users']),
+                                   headers=self.get_headers(self.access_token))
+
+        if self.resp_code_check(response.status_code):
+            return True
+        else:
+            return False
+
+    def send_invite_email(self, user_email):
+        """
+            Re-send console invite. Return True if successful. False is not.
+        :return:
+        """
+        # Generate a new access token before each request for security.
+        self.get_access_token()
+        response = requests.post(str(self.base_endpoint + services['users'] + user_email + '/invite'),
+                                 headers=self.get_headers(self.access_token))
+
+        if self.resp_code_check(response.status_code):
+            return True
+        else:
+            return False
+
+    def send_reset_pass_email(self, user_email):
         """
 
         :return:
         """
-        # TODO
+        # Generate a new access token before each request for security.
+        self.get_access_token()
+        response = requests.post(str(self.base_endpoint + services['users'] + user_email + '/resetpassword'),
+                                 headers=self.get_headers(self.access_token))
 
-    def send_reset_pass_email(self):
-        """
-
-        :return:
-        """
-        # TODO
+        if self.resp_code_check(response.status_code):
+            return True
+        else:
+            return False
 
     def get_devices(self, page_num=0, page_size=200):
         """
