@@ -141,7 +141,7 @@ class CyPyAPI:
             raise exception.Response500Error
         elif response_code == 501:
             raise exception.Response501Error
-        elif response_code == 200 or response_code == 202:
+        elif response_code in range(200, 299):
             return True
         else:
             raise exception.ResponseError(response_code)
@@ -208,18 +208,6 @@ class CyPyAPI:
         """
         Create a new console user. Requires a unique e-mail address.
 
-             {
-             "email": "string",
-             "user_role": "string",
-             "first_name": "string",  # max 64 chars
-             "last_name": "string",  # max 64 chars
-             "zones": [  # If the user_role is Admin, this doesn't matter.
-               "id": "string",
-               "role_type", "string"
-               "role_name", "string"
-              ]
-            }
-
         :param email: string
         :param user_role: string
         :param first_name: string
@@ -228,12 +216,20 @@ class CyPyAPI:
         :return:
         """
         # Build the data params DICT to submit
-        # TODO
+        data = {
+            "email": email,
+            "user_role": user_role,
+            "first_name": first_name,
+            "last_name": last_name,
+            "zones": zones
+        }
+        data = json.dumps(data)
 
         # Generate a new access token before each request for security.
         self.get_access_token()
         response = requests.post(str(self.base_endpoint + services['users']),
-                                 headers=self.get_headers(self.access_token))
+                                 headers=self.get_headers(self.access_token),
+                                 data=data)
 
         if self.resp_code_check(response.status_code):
             return True
@@ -315,12 +311,31 @@ class CyPyAPI:
             for item in content['page_items']:
                 return item
 
-    def update_user(self):
+    def update_user(self, identifier, email, user_role, first_name, last_name, zones=[]):
         """
             Update a console user.
         :return:
         """
-        # TODO
+        # Build the data params DICT to submit
+        data = {
+            "email": email,
+            "user_role": user_role,
+            "first_name": first_name,
+            "last_name": last_name,
+            "zones": zones
+        }
+        data = json.dumps(data)
+
+        # Generate a new access token before each request, for security.
+        self.get_access_token()
+        response = requests.put(str(self.base_endpoint + services['users'] + identifier),
+                                headers=self.get_headers(self.access_token),
+                                data=data)
+
+        if self.resp_code_check(response.status_code):
+            return True
+        else:
+            return False
 
     def delete_user(self, user_id):
         """
@@ -328,12 +343,12 @@ class CyPyAPI:
         :return:
         """
         if not user_id:
-            logging.error('No User ID given')
+            logging.error('No User ID provided to delete_user')
             exit(2)
 
         # Generate a new access token before each request for security.
         self.get_access_token()
-        response = requests.delete(str(self.base_endpoint + services['users']),
+        response = requests.delete(str(self.base_endpoint + services['users'] + user_id),
                                    headers=self.get_headers(self.access_token))
 
         if self.resp_code_check(response.status_code):
@@ -495,12 +510,30 @@ class CyPyAPI:
             for item in content['page_items']:
                 return item
 
-    def update_device(self, device_id):
+    def update_device(self, device_id, name, policy_id, add_zone_ids=[], remove_zone_ids=[]):
         """
             Update a console device
         :return:
         """
-        # TODO
+        # Build the data params DICT to submit
+        data = {
+            "name": name,
+            "policy_id": policy_id,
+            "add_zone_ids": add_zone_ids,
+            "remove_zone_ids": remove_zone_ids
+        }
+        data = json.dumps(data)
+
+        # Generate a new access token before each request, for security.
+        self.get_access_token()
+        response = requests.put(str(self.base_endpoint + services['devices'] + device_id),
+                                headers=self.get_headers(self.access_token),
+                                data=data)
+
+        if self.resp_code_check(response.status_code):
+            return True
+        else:
+            return False
 
     def get_device_threats(self, device_id, page_num=0, page_size=200):
         """
@@ -719,17 +752,34 @@ class CyPyAPI:
             for item in content['page_items']:
                 return item
 
-    def update_device_threat(self, device_id):
+    def update_device_threat(self, device_id, threat_id, event):
         """
             Waive or Quarantine a convicted threat on a device.
         :param device_id:
         :return:
         """
-        # TODO
+        # Build the data params DICT to submit
+        data = {
+            "threat_id": threat_id,  # SHA256
+            "event": event  # Quarantine or Waive
+        }
+        data = json.dumps(data)
+
+        # Generate a new access token before each request, for security.
+        self.get_access_token()
+        response = requests.post(str(self.base_endpoint + services['devices'] + device_id + '/threats'),
+                                 headers=self.get_headers(self.access_token),
+                                 data=data)
+
+        if self.resp_code_check(response.status_code):
+            return True
+        else:
+            return False
 
     def delete_devices(self, callback_url, device_ids=[], method='delete'):
         """
             This function supports an optional callback_url, as well as a JSON list of device ID's. Maximum 20.
+            Provides an optional method parameter if your client does not support DELETE.
 
         :return:
         """
@@ -739,13 +789,16 @@ class CyPyAPI:
 
         if not callback_url:
             data = {
-                'device_ids': device_ids,
+                "device_ids": device_ids,
             }
         else:
             data = {
-                'device_ids': device_ids,
-                'callback_url': callback_url
+                "device_ids": device_ids,
+                "callback_url": callback_url
             }
+
+        # Ensure that the data is formatted for JSON
+        data = json.dumps(data)
 
         # Generate a new access token before each request for security.
         self.get_access_token()
@@ -794,7 +847,6 @@ class CyPyAPI:
         # Validates the response code, and returns an exception if the request is not a success.
         if self.resp_code_check(response.status_code):
             return content
-
 
     def get_global_list(self, list_type, page_num=0, page_size=200):
         """
@@ -1124,11 +1176,12 @@ class CyPyAPI:
         """
         # set an access token
         self.get_access_token()
-        response = requests.get(str(self.base_endpoint + services['threats'] + 'download/' + hash_))
+        response = requests.get(str(self.base_endpoint + services['threats'] + 'download/' + hash_),
+                                headers=self.get_headers(self.access_token))
+        content = json.loads(response.content)
 
         if self.resp_code_check(response.status_code):
-            content = json.loads(response.content)
-            return content[0]
+            return content['url']
 
     def get_zones(self, page_num=0, page_size=200):
         """
@@ -1291,39 +1344,85 @@ class CyPyAPI:
             content = json.loads(response.content)
             return content[0]
 
-    def create_zone(self):
+    def create_zone(self, name, policy_id, criticality):
         """
 
         :return:
         """
-        # TODO
+        if not name:
+            logging.error('No user ID included with call to create_policy')
+            exit(2)
+        if not policy_id:
+            logging.error('No policy included with call to create_policy')
+            exit(2)
+        if not criticality:
+            logging.error('No criticality included with call to create_policy')
+            exit(2)
 
-    def update_zone(self):
+            # Build the data params DICT to submit
+        data = {
+            "name": name,
+            "policy_id": policy_id,
+            "criticality": criticality
+        }
+
+        # Ensure that the data is formatted for JSON
+        data = json.dumps(data)
+
+        # Generate a new access token before each request for security.
+        self.get_access_token()
+        response = requests.post(str(self.base_endpoint + services['zones']),
+                                 headers=self.get_headers(self.access_token),
+                                 data=data)
+        content = json.loads(response.content)
+
+        if self.resp_code_check(response.status_code) and content['policy_id']:
+            # Return the unique identifier of the new zone
+            return content['id']
+        else:
+            return False
+
+    def update_zone(self, zone_id, name, policy_id, criticality):
         """
 
         :return:
         """
-        # TODO
+        # Build the data params DICT to submit
+        data = {
+            "name": name,
+            "policy_id": policy_id,
+            "criticality": criticality
+        }
+        data = json.dumps(data)
+
+        # Generate a new access token before each request, for security.
+        self.get_access_token()
+        response = requests.put(str(self.base_endpoint + services['zones'] + zone_id),
+                                headers=self.get_headers(self.access_token),
+                                data=data)
+
+        if self.resp_code_check(response.status_code):
+            return True
+        else:
+            return False
 
     def delete_zone(self, zone_id):
         """
-
+            Given a valid Zone ID, return True if the zone was successfully removed.
         :return:
         """
-        # TODO: Create an exception like the commented one below to check for a valid zone_id
-        # if 64 > len(
-        #         sha256_hash) > 64:
-        #     raise exception.InvalidSHA256Error
+        if not zone_id:
+            logging.error('No zone_id provided.')
+            exit(2)
 
         # Generate a new access token before each request, for security.
         self.get_access_token()
         response = requests.delete(str(self.base_endpoint + services['zones'] + zone_id))
 
         if self.resp_code_check(response.status_code):
-            content = json.loads(response.content)
-            confirmation = content[0]
-
-            return confirmation
+            return True
+        else:
+            return False
 
     def get_policy(self, policy_id):
         """ """
@@ -1334,9 +1433,8 @@ class CyPyAPI:
         content = json.loads(response.content)
 
         # Validates the response code, and returns an exception if the request is not a success.
-        if self.resp_code_check(response.status_code) and content['page_items']:
-            for item in content['page_items']:
-                return item
+        if self.resp_code_check(response.status_code):
+            return content
 
     def get_policies(self, page_num=0, page_size=200):
         """ """
@@ -1390,14 +1488,116 @@ class CyPyAPI:
 
         return policies
 
-    def create_policy(self):
-        """ """
+    def create_policy(self, user_id, policy={}):
+        """
+            Create a new within Cylance. Returns the newly created policy_id if successful. Otherwise it returns False.
 
-    def update_policy(self):
-        """ """
+        :param user_id:
+        :param policy:
+        :return:
+        """
+        if not user_id:
+            logging.error('No user ID included with call to create_policy')
+            exit(2)
+        if not policy:
+            logging.error('No policy included with call to create_policy')
+            exit(2)
 
-    def delete_policy(self):
-        """ """
+        # Build the data params DICT to submit
+        data = {
+            "user_id": user_id,
+            "policy": policy
+        }
 
-    def delete_policies(self):
-        """ """
+        # Ensure that the data is formatted for JSON
+        data = json.dumps(data)
+
+        # Generate a new access token before each request for security.
+        self.get_access_token()
+        response = requests.post(str(self.base_endpoint + services['policies']),
+                                 headers=self.get_headers(self.access_token),
+                                 data=data)
+        content = json.loads(response.content)
+
+        if self.resp_code_check(response.status_code) and content['policy_id']:
+            # Return the unique identifier of the new policy
+            return content['policy_id']
+        else:
+            return False
+
+    def update_policy(self, user_id, policy={}):
+        """
+            Given unique user_id and policy dict, update the policy.
+        :param user_id:
+        :param policy:
+        :return:
+        """
+        # Build the data params DICT to submit
+        data = {
+            "user_id": user_id,
+            "policy": policy
+        }
+        data = json.dumps(data)
+
+        # Generate a new access token before each request, for security.
+        self.get_access_token()
+        response = requests.put(str(self.base_endpoint + services['policies']),
+                                headers=self.get_headers(self.access_token),
+                                data=data)
+        content = json.loads(response.content)
+
+        # The return will always with a HTTP204 according to the API doc.
+        if self.resp_code_check(response.status_code):
+            return content['checksum']
+        else:
+            return False
+
+    def delete_policy(self, policy_id):
+        """
+                    Delete a console user. Return True if successful. False is not.
+                :return:
+                """
+        if not policy_id:
+            logging.error('No User ID provided to delete_user')
+            exit(2)
+
+        # Generate a new access token before each request for security.
+        self.get_access_token()
+        response = requests.delete(str(self.base_endpoint + services['policies'] + policy_id),
+                                   headers=self.get_headers(self.access_token))
+
+        # The return will always with a HTTP204 according to the API doc.
+        if self.resp_code_check(response.status_code):
+            return True
+        else:
+            return False
+
+    def delete_policies(self, policy_ids=[]):
+        """
+            This function supports an optional callback_url, as well as a JSON list of device ID's. Maximum 20.
+            Provides an optional method parameter if your client does not support DELETE.
+
+        :return:
+        """
+        if not policy_ids:
+            logging.error('No Device IDs existed in the provided list')
+            exit(2)
+
+        data = {
+            "tenant_policy_ids": policy_ids,
+        }
+
+        # Ensure that the data is formatted for JSON
+        data = json.dumps(data)
+
+        # Generate a new access token before each request for security.
+        self.get_access_token()
+        response = requests.delete(str(self.base_endpoint + services['policies']),
+                                   headers=self.get_headers(self.access_token),
+                                   data=data)
+
+        if self.resp_code_check(response.status_code):
+            # The return will always with a HTTP204 according to the API doc.
+            return True
+        else:
+            return False
