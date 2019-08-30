@@ -192,3 +192,81 @@ class MaxTimeoutExceeded(Error):
     def __init__(self):
 
         self.message = 'Max Timeout Exceeded. Maximum timeout must not exceed 1800 seconds.'
+
+
+class InvalidArchitecture(Error):
+    """Exception raised for when an invalid base endpoint is selected.
+
+    Attributes:
+           code --
+           message --
+    """
+
+    def __init__(self):
+
+        self.message = 'Invalid Architecture provided'
+
+
+class InvalidPackage(Error):
+    """Exception raised for when an invalid base endpoint is selected.
+
+    Attributes:
+           code --
+           message --
+    """
+
+    def __init__(self):
+
+        self.message = 'Invalid Package provided'
+
+
+class InvalidBuild(Error):
+    """Exception raised for when an invalid base endpoint is selected.
+
+    Attributes:
+           code --
+           message --
+    """
+
+    def __init__(self):
+
+        self.message = 'Invalid Build provided'
+
+
+class InvalidProduct(Error):
+    """Exception raised for when an invalid base endpoint is selected.
+
+    Attributes:
+           code --
+           message --
+    """
+
+    def __init__(self):
+
+        self.message = 'Invalid Product provided'
+
+
+class InvalidMethod(Error):
+    """Exception raised for when an invalid base endpoint is selected.
+
+    Attributes:
+           code --
+           message --
+    """
+
+    def __init__(self):
+
+        self.message = 'Invalid Method used'
+
+
+class InvalidMAC(Error):
+    """Exception raised for when an invalid base endpoint is selected.
+
+    Attributes:
+           code --
+           message --
+    """
+
+    def __init__(self):
+
+        self.message = 'Invalid MAC Address'
