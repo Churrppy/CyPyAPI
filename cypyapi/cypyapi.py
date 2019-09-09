@@ -87,7 +87,7 @@ class CyPyAPI:
         # Create a new logging configuration
         # Levels: Debug, Info, Warning, Error, Critical
         logging_format = '%(created)f - %(name)s - %(levelname)s - %(message)s'
-        logging.basicConfig(filename='cypyapi.log', filemode='w', format=logging_format)
+        logging.basicConfig(filename='cypyapi.log', format=logging_format, level='WARNING')
 
         # Set the appropriate Service Endpoint based on the Region Code.
         if region_code is 'na':
@@ -101,15 +101,17 @@ class CyPyAPI:
             logging.info(str(region_code) + ' Base Endpoint selected.')
         else:
             logging.error('Invalid region code provided')
-            raise
+            raise exception.InvalidRegionCode
 
         # These are used when generating access tokens
         try:
             self.tenant_id = tenant_id
             self.app_id = app_id
             self.app_secret = app_secret
-        except ValueError:
+        except NameError:
+            # TODO: This may not be necessary as the Class might error out if the arguments aren't supplied on creation
             logging.error('Missing Tenant ID, App ID, or App Secret when initiating object creation')
+            raise exception.UnassignedVariable
 
         # Set an empty access_token variable for later.
         self.access_token = ''
@@ -138,7 +140,6 @@ class CyPyAPI:
         :param response_code:
         :return:
         """
-
         if response_code == 400:
             raise exception.Response400Error
         elif response_code == 401:
@@ -168,12 +169,15 @@ class CyPyAPI:
 
         # Return True if the token is still active; False if the token is expired.
         if epoch_now >= self.timeout:
+            logging.info('Token timeout not exceeded.')
             return True
         else:
+            logging.error('Token timeout exceeded.')
             return False
 
     def get_access_token(self, timeout=1800):
         """
+        TODO: Add some ability to provide scope
 
         :return:
         """
@@ -215,6 +219,7 @@ class CyPyAPI:
                 response_content = json.loads(response.content)
                 # Set access token.
                 self.access_token = response_content['access_token']
+                logging.info('Access token generated ' + self.access_token)
 
     def create_user(self, email, user_role, first_name, last_name, zones=[]):
         """

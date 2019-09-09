@@ -270,3 +270,29 @@ class InvalidMAC(Error):
     def __init__(self):
 
         self.message = 'Invalid MAC Address'
+
+
+class InvalidRegionCode(Error):
+    """Exception raised for when an invalid base endpoint is selected.
+
+    Attributes:
+           code --
+           message --
+    """
+
+    def __init__(self):
+
+        self.message = 'Invalid Region Code'
+
+
+class UnassignedVariable(Error):
+    """Exception raised for when an invalid base endpoint is selected.
+
+    Attributes:
+           code --
+           message --
+    """
+
+    def __init__(self):
+
+        self.message = 'Unassigned variable'
