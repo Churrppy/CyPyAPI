@@ -86,6 +86,20 @@ class Response409Error(Error):
         self.message = str(self.code) + ' -- Conflict --'
 
 
+class Response413Error(Error):
+    """Exception raised for errors in response.
+
+    Attributes:
+          code -- response code that was returned.
+          message -- explanation of the response code as per the Cylance API documentation.
+    """
+
+    def __init__(self):
+
+        self.code = 413
+        self.message = str(self.code) + ' -- PayloadTooLarge --'
+
+
 class Response429Error(Error):
     """Exception raised for errors in response.
 
@@ -165,3 +179,94 @@ class InvalidListType(Error):
     def __init__(self):
 
         self.message = 'Invalid List Type. List range is 0 (GlobalQuarantine or 1 (GlobalSafe)'
+
+
+class MaxTimeoutExceeded(Error):
+    """Exception raised for when an invalid base endpoint is selected.
+
+    Attributes:
+           code --
+           message --
+    """
+
+    def __init__(self):
+
+        self.message = 'Max Timeout Exceeded. Maximum timeout must not exceed 1800 seconds.'
+
+
+class InvalidArchitecture(Error):
+    """Exception raised for when an invalid base endpoint is selected.
+
+    Attributes:
+           code --
+           message --
+    """
+
+    def __init__(self):
+
+        self.message = 'Invalid Architecture provided'
+
+
+class InvalidPackage(Error):
+    """Exception raised for when an invalid base endpoint is selected.
+
+    Attributes:
+           code --
+           message --
+    """
+
+    def __init__(self):
+
+        self.message = 'Invalid Package provided'
+
+
+class InvalidBuild(Error):
+    """Exception raised for when an invalid base endpoint is selected.
+
+    Attributes:
+           code --
+           message --
+    """
+
+    def __init__(self):
+
+        self.message = 'Invalid Build provided'
+
+
+class InvalidProduct(Error):
+    """Exception raised for when an invalid base endpoint is selected.
+
+    Attributes:
+           code --
+           message --
+    """
+
+    def __init__(self):
+
+        self.message = 'Invalid Product provided'
+
+
+class InvalidMethod(Error):
+    """Exception raised for when an invalid base endpoint is selected.
+
+    Attributes:
+           code --
+           message --
+    """
+
+    def __init__(self):
+
+        self.message = 'Invalid Method used'
+
+
+class InvalidMAC(Error):
+    """Exception raised for when an invalid base endpoint is selected.
+
+    Attributes:
+           code --
+           message --
+    """
+
+    def __init__(self):
+
+        self.message = 'Invalid MAC Address'
