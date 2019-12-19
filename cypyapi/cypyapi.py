@@ -32,6 +32,7 @@ services = {
             'auth': 'auth/v2/',
             'users': 'users/v2/',
             'threats': 'threats/v2/',
+            'detections': 'detections/v2/',
             'devices': 'devices/v2/',
             'globallists': 'globallists/v2/',
             'zones': 'zones/v2/',
@@ -90,7 +91,7 @@ class CyPyAPI:
         logging.basicConfig(filename='cypyapi.log', format=logging_format, level='WARNING')
 
         # Set the appropriate Service Endpoint based on the Region Code.
-        if region_code is 'na':
+        if region_code == "na":
             self.base_endpoint = 'https://protectapi.cylance.com/'
             logging.info('NA Base Endpoint selected.')
         elif region_code is 'us-gov':
@@ -210,7 +211,7 @@ class CyPyAPI:
             # Encode the request with JWT.
             encoded_req = jwt.encode(claims, self.app_secret, algorithm='HS256')
 
-            payload = {'auth_token': str(encoded_req, 'utf-8')}
+            payload = {'auth_token': str(encoded_req)}
             headers = {'Content-Type': 'application/json; charset=utf-8'}
             response = requests.post(str(self.base_endpoint + services['auth'] + 'token'), headers=headers,
                                      data=json.dumps(payload))
@@ -933,6 +934,62 @@ class CyPyAPI:
         # Validates the response code, and returns an exception if the request is not a success.
         if self.resp_code_check(response.status_code):
             return content
+
+    def get_detections(self, page_num=0, page_size=200):
+        """
+            Request a page with a list of console detection resources. Sorted by last found date, in descending order.
+
+        :return:
+        """
+        detections = []
+
+        # If the page number is less than 1, we have to loop through the pages to get them all
+        if page_num == 0:
+            # Set the current page to 1
+            current_page = 1
+
+            while True:
+                # Set the initial page and the maximum page_size.
+                params = {
+                    'page': current_page,
+                    'page_size': page_size
+                }
+
+                # Generate a new access token before the entire request for security.
+                self.get_access_token()
+                response = requests.get(str(self.base_endpoint + services['detections']),
+                                        headers=self.get_headers(self.access_token),
+                                        params=params)
+                content = json.loads(response.content)
+
+                if self.resp_code_check(response.status_code) and content['page_items']:
+                    for item in content['page_items']:
+                        detections.append(item)
+                    current_page += 1
+
+                else:
+                    break
+
+        else:
+            # Set the parameters of the request.
+            params = {
+                'page': page_num,
+                'page_size': page_size
+            }
+
+            # Generate a new access token before each request for security.
+            self.get_access_token()
+            response = requests.get(str(self.base_endpoint + services['detections']),
+                                    headers=self.get_headers(self.access_token),
+                                    params=params)
+            content = json.loads(response.content)
+
+            # Validates the response code, and returns an exception if the request is not a success.
+            if self.resp_code_check(response.status_code) and content['page_items']:
+                for item in content['page_items']:
+                    detections.append(item)
+
+        return detections
 
     def get_threats(self, page_num=0, page_size=200):
         """
